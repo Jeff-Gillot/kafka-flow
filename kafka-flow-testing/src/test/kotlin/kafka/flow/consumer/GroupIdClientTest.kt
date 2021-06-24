@@ -4,6 +4,7 @@ import kafka.flow.TopicDescriptor
 import kafka.flow.consumer.with.group.id.KafkaFlowConsumerWithGroupId
 import kafka.flow.server.Server
 import kafka.flow.producer.KafkaFlowTopicProducer
+import kafka.flow.testing.Await
 import kafka.flow.testing.TestObject
 import kafka.flow.testing.TestTopicDescriptor
 import kotlinx.coroutines.delay

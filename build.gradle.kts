@@ -38,6 +38,7 @@ project(":kafka-flow-client") {
         implementation(project(":kafka-flow-topic-descriptor"))
         implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.0")
         implementation("org.apache.kafka:kafka-clients:$kafkaVersion")
+        testImplementation("io.strikt:strikt-core:0.31.0")
     }
 }
 

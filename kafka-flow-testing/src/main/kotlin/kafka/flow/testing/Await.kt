@@ -1,28 +1,30 @@
-package kafka.flow.consumer
+package kafka.flow.testing
 
+import kafka.flow.utils.milliseconds
+import kafka.flow.utils.seconds
 import kotlinx.coroutines.delay
 import java.time.Duration
 import java.time.Instant
 
-class Await() {
-    var timeout = 10.seconds()
-    var interval = 10.milliseconds()
+public class Await() {
+    public var timeout: Duration = 10.seconds()
+    public var interval: Duration = 10.milliseconds()
 
-    constructor(block: Await.() -> Unit) : this() {
+    public constructor(block: Await.() -> Unit) : this() {
         block.invoke(this)
     }
 
-    fun timeout(duration: Duration): Await {
+    public fun timeout(duration: Duration): Await {
         timeout = duration
         return this
     }
 
-    fun atMost(duration: Duration): Await {
+    public fun atMost(duration: Duration): Await {
         timeout = duration
         return this
     }
 
-    suspend fun untilAsserted(block: () -> Unit) {
+    public suspend fun untilAsserted(block: () -> Unit) {
         val timeoutTime = Instant.now() + timeout
         var lastError: Throwable? = safeInvoke(block)
         while (lastError != null && timeoutTime > Instant.now()) {
@@ -37,9 +39,5 @@ class Await() {
         null
     } catch (error: Throwable) {
         error
-    }
-
-    companion object {
-        fun await() = Await()
     }
 }
