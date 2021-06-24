@@ -1,3 +1,3 @@
-package be.delta.flow.client
+package kafka.flow.consumer
 
 public class Topic(public val name: String)

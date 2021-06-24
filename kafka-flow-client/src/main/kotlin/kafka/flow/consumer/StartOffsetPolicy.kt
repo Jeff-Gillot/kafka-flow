@@ -1,4 +1,4 @@
-package be.delta.flow.client
+package kafka.flow.consumer
 
 import java.time.Duration
 import java.time.Instant

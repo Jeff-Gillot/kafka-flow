@@ -1,10 +1,13 @@
-package be.delta.flow.client.with.group.id
+package kafka.flow.consumer.with.group.id
 
-import be.delta.flow.client.*
-import kotlinx.coroutines.*
+import kafka.flow.consumer.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener
@@ -16,9 +19,9 @@ import java.time.Instant
 import java.util.*
 import kotlin.coroutines.EmptyCoroutineContext
 
-public class KafkaFlowClientWithGroupId(
+public class KafkaFlowConsumerWithGroupId(
     private val clientProperties: Properties,
-    private val topics: List<Topic>,
+    private val topics: List<String>,
     private val startOffsetPolicy: StartOffsetPolicy,
     private val autoStopPolicy: AutoStopPolicy
 ) {
@@ -28,21 +31,21 @@ public class KafkaFlowClientWithGroupId(
     private var startInstant: Instant? = null
     private var endOffsets: Map<TopicPartition, Long> = emptyMap()
     private var assignment: List<TopicPartition> = emptyList()
-    private val partitionChangedMessages = mutableListOf<PartitionChangedMessage>()
+    private val partitionChangedMessages = mutableListOf<PartitionChangedMessage<Unit, Unit, Unit, Unit>>()
     private val delegateMutex = Mutex()
 
     public suspend fun startConsuming(): Flow<KafkaMessage<Unit, Unit, Unit, Unit>> = flow {
         subscribe()
-        emit(StartConsuming)
+        emit(StartConsuming())
         while (!shouldStop()) {
             val records = delegateMutex.withLock { delegate.poll(Duration.ZERO) }
             partitionChangedMessages.forEach { emit(it) }
             partitionChangedMessages.clear()
             records.map { Record(it, Unit, Unit, Unit, Unit) }.forEach { emit(it) }
             if (records.isEmpty) delay(10)
-            if (!records.isEmpty) emit(EndOfBatch)
+            if (!records.isEmpty) emit(EndOfBatch())
         }
-        emit(StopConsuming)
+        emit(StopConsuming())
     }.onCompletion {
         delegateMutex.withLock { delegate.close() }
         running = false
@@ -71,59 +74,62 @@ public class KafkaFlowClientWithGroupId(
         }
     }
 
-    private fun subscribe() {
+    public fun stop() {
+        stopRequested = true
+    }
+
+    private suspend fun subscribe() {
         startInstant = Instant.now()
-        val topicNames = topics.map { it.name }
-        delegate.subscribe(topicNames, object : ConsumerRebalanceListener {
-            override fun onPartitionsRevoked(partitions: MutableCollection<TopicPartition>) = partitionRevoked(partitions.toList())
-            override fun onPartitionsAssigned(partitions: MutableCollection<TopicPartition>) = partitionAssigned(partitions.toList())
-        })
+        delegateMutex.withLock {
+            delegate.subscribe(topics, object : ConsumerRebalanceListener {
+                override fun onPartitionsRevoked(partitions: MutableCollection<TopicPartition>) = partitionRevoked(partitions.toList())
+                override fun onPartitionsAssigned(partitions: MutableCollection<TopicPartition>) = partitionAssigned(partitions.toList())
+            })
+        }
         running = true
         startEndOffsetsRefreshLoop()
     }
 
     private fun startEndOffsetsRefreshLoop() {
         CoroutineScope(EmptyCoroutineContext).launch(Dispatchers.IO) {
-            val endOffsetConsumer: KafkaConsumer<ByteArray, ByteArray> = KafkaConsumer(clientProperties)
-            while (running) {
-                try {
-                    endOffsets = endOffsetConsumer.endOffsets(assignment)
-                    delay(10_000)
-                } catch (t: Throwable) {
-                    println("Error while trying to fetch the end offsets")
-                } finally {
-                    endOffsetConsumer.close()
+            val endOffsetConsumer: KafkaConsumer<ByteArray, ByteArray> = KafkaConsumer(clientProperties, ByteArrayDeserializer(), ByteArrayDeserializer())
+            endOffsetConsumer.use {
+                while (!shouldStop()) {
+                    try {
+                        endOffsets = endOffsetConsumer.endOffsets(assignment)
+                        delay(10_000)
+                    } catch (t: Throwable) {
+                        println("Error while trying to fetch the end offsets")
+                        t.printStackTrace()
+                    }
                 }
             }
         }
     }
 
     private fun partitionAssigned(assignedPartitions: List<TopicPartition>) {
-        runBlocking {
-            assignment = delegateMutex.withLock { delegate.assignment().toList() }
-            partitionChangedMessages.add(PartitionsAssigned(assignedPartitions, assignment))
-            seek(assignedPartitions)
-        }
+        assignment = delegate.assignment().toList()
+        partitionChangedMessages.add(PartitionsAssigned(assignedPartitions, assignment))
+        seek(assignedPartitions)
     }
 
-    private  fun partitionRevoked(revokedPartition: List<TopicPartition>) {
-        runBlocking {
-            assignment = delegateMutex.withLock { delegate.assignment().toList() }
-            partitionChangedMessages.add(PartitionsRevoked(revokedPartition, assignment))
-        }
+    private fun partitionRevoked(revokedPartition: List<TopicPartition>) {
+        assignment = delegate.assignment().toList()
+        partitionChangedMessages.add(PartitionsRevoked(revokedPartition, assignment))
     }
 
-    private suspend fun seek(assignedPartitions: List<TopicPartition>) {
+    private fun seek(assignedPartitions: List<TopicPartition>) {
         when (startOffsetPolicy) {
             is StartOffsetPolicy.SpecificOffsetFromNow -> seekToSpecifiedTime(assignedPartitions, Instant.now() - startOffsetPolicy.duration)
             is StartOffsetPolicy.SpecificTime -> seekToSpecifiedTime(assignedPartitions, startOffsetPolicy.offsetTime)
-            StartOffsetPolicy.Earliest, StartOffsetPolicy.Latest -> {
+            StartOffsetPolicy.Earliest -> delegate.seekToBeginning(assignedPartitions)
+            StartOffsetPolicy.Latest -> {
                 // Let the kafka internal client deal with that
             }
         }
     }
 
-    private suspend fun seekToSpecifiedTime(assignedPartitions: List<TopicPartition>, instant: Instant) = delegateMutex.withLock {
+    private fun seekToSpecifiedTime(assignedPartitions: List<TopicPartition>, instant: Instant) {
         val endOffsets = delegate.endOffsets(assignedPartitions)
         val offsetsForTime = delegate.offsetsForTimes(assignedPartitions.associateWith { instant.toEpochMilli() })
         assignedPartitions.forEach {
