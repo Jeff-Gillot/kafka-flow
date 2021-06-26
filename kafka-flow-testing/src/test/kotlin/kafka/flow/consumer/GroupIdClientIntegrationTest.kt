@@ -30,7 +30,7 @@ import strikt.assertions.isNotEmpty
 import java.util.*
 
 
-class GroupIdClientTest {
+class GroupIdClientIntegrationTest {
     private lateinit var topic: TopicDescriptor<TestObject.Key, String, TestObject>
     private lateinit var producer: KafkaFlowTopicProducer<TestObject.Key, String, TestObject>
     private var consumer: KafkaFlowConsumerWithGroupId? = null
