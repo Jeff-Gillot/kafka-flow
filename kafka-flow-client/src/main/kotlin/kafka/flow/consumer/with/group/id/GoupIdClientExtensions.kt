@@ -15,7 +15,11 @@ public suspend fun <Key, Partition, Value, Output> Flow<KafkaMessage<Key, Partit
     val transactionManager = TransactionManager(maxOpenTransactions)
     var client: KafkaFlowConsumerWithGroupId? = null
     var commitLoop: Job? = null
-    return onCompletion { commitLoop?.cancel() }
+    return this
+        .onCompletion {
+            commitLoop?.cancel()
+            client?.let { transactionManager.rollbackAndCommit(it) }
+        }
         .onStartConsuming {
             client = it.client
             commitLoop = CoroutineScope(currentCoroutineContext()).launch {
@@ -24,10 +28,6 @@ public suspend fun <Key, Partition, Value, Output> Flow<KafkaMessage<Key, Partit
                     transactionManager.rollbackAndCommit(it.client)
                 }
             }
-        }
-        .onStopConsuming {
-            commitLoop?.cancel()
-            client?.let { transactionManager.rollbackAndCommit(it) }
         }
         .mapRecord { record ->
             val transaction = Transaction(TopicPartition(record.consumerRecord.topic(), record.consumerRecord.partition()), record.consumerRecord.offset(), transactionManager)

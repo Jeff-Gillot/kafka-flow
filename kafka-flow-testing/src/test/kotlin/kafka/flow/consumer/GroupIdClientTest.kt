@@ -85,10 +85,18 @@ class GroupIdClientTest {
 
         consumer = KafkaFlowConsumerWithGroupId(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
 
-        val count = consumer!!.startConsuming().values().take(3).count()
+        var count = 0
+        launch {
+            count = consumer!!.startConsuming().values()
+                .take(3)
+                .count()
+        }
 
-        expectThat(consumer!!).get("isRunning") { isRunning }.isEqualTo(false)
-        expectThat(count).describedAs("count").isEqualTo(3)
+        Await().untilAsserted {
+            expectThat(consumer!!).get("isRunning") { isRunning }.isEqualTo(false)
+            expectThat(count).describedAs("count").isEqualTo(3)
+        }
+        consumer!!.stop()
     }
 
     @Test

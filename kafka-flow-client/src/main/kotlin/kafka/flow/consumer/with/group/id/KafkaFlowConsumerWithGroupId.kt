@@ -5,6 +5,7 @@ import kafka.flow.utils.milliseconds
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.consumeAsFlow
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.sync.Mutex
@@ -42,10 +43,7 @@ public class KafkaFlowConsumerWithGroupId(
         subscribe()
         return createConsumerChannel()
             .consumeAsFlow()
-            .onCompletion {
-                emit(StopConsuming())
-                delegateMutex.withLock { delegate.close() }
-            }
+            .onCompletion { cleanup() }
     }
 
     private suspend fun createConsumerChannel(): Channel<KafkaMessage<Unit, Unit, Unit, Unit>> {
@@ -61,13 +59,11 @@ public class KafkaFlowConsumerWithGroupId(
                     if (records.isEmpty) yield()
                     if (!records.isEmpty) channel.send(EndOfBatch())
                 }
-//                channel.send(StopConsuming())
                 channel.close()
             } catch (t: CancellationException) {
             } catch (t: Throwable) {
                 t.printStackTrace()
             } finally {
-                running = false
                 channel.close()
             }
         }
@@ -122,7 +118,7 @@ public class KafkaFlowConsumerWithGroupId(
                         endOffsets = endOffsetConsumer.endOffsets(assignment)
                         delay(10_000)
                     } catch (t: Throwable) {
-                        println("Error while trying to fetch the end offsets")
+                        logger.warn("Error while trying to fetch the end offsets")
                         t.printStackTrace()
                     }
                 }
@@ -160,21 +156,40 @@ public class KafkaFlowConsumerWithGroupId(
         }
     }
 
-    public suspend fun commit(commitOffsets: Map<TopicPartition, OffsetAndMetadata>): Unit = delegateMutex.withLock {
-        delegate.commitAsync(commitOffsets) { offsets, exception ->
-            if (exception != null) {
-                logger.warn("Error while committing offsets ($offsets)", exception)
+    public suspend fun commit(commitOffsets: Map<TopicPartition, OffsetAndMetadata>) {
+        delegateMutex.withLock {
+            if (isRunning) {
+                delegate.commitAsync(commitOffsets) { offsets, exception ->
+                    if (exception != null) {
+                        logger.warn("Error while committing offsets ($offsets)", exception)
+                    }
+                }
             }
         }
     }
 
     public suspend fun rollback(topicPartitionToRollback: Set<TopicPartition>) {
         delegateMutex.withLock {
-            val committedOffsets = delegate.committed(topicPartitionToRollback)
-            topicPartitionToRollback.forEach { topicPartition ->
-                delegate.seek(topicPartition, committedOffsets[topicPartition]?.offset() ?: 0)
+            if (isRunning) {
+                val committedOffsets = delegate.committed(topicPartitionToRollback)
+                topicPartitionToRollback.forEach { topicPartition ->
+                    delegate.seek(topicPartition, committedOffsets[topicPartition]?.offset() ?: 0)
+                }
             }
         }
     }
 
+    private suspend fun FlowCollector<KafkaMessage<Unit, Unit, Unit, Unit>>.cleanup() {
+        try {
+            emit(StopConsuming())
+        } finally {
+            CoroutineScope(currentCoroutineContext()).launch {
+                delay(50)
+                delegateMutex.withLock {
+                    running = false
+                    delegate.close()
+                }
+            }
+        }
+    }
 }
