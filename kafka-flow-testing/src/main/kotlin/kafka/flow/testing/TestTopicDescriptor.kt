@@ -21,7 +21,7 @@ public class TestTopicDescriptor(override val name: String) : TopicDescriptor<Te
     override fun deserializeValue(value: ByteArray?): TestObject? {
         if (value == null) return null
         val parts = String(value).split('/')
-        return TestObject(TestObject.Key(parts[0], parts[1]), Instant.parse(parts[2]), parts[3])
+        return TestObject(TestObject.Key(parts[1], parts[0]), Instant.parse(parts[2]), parts[3])
     }
 
     override fun key(value: TestObject): TestObject.Key = value.key

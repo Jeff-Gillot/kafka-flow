@@ -1,20 +1,20 @@
 package kafka.flow.consumer.with.group.id
 
 import kafka.flow.consumer.*
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
+import kafka.flow.utils.milliseconds
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.consumeAsFlow
 import kotlinx.coroutines.flow.onCompletion
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener
 import org.apache.kafka.clients.consumer.KafkaConsumer
+import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
-import java.time.Duration
+import org.slf4j.LoggerFactory
 import java.time.Instant
 import java.util.*
 import kotlin.coroutines.EmptyCoroutineContext
@@ -25,6 +25,7 @@ public class KafkaFlowConsumerWithGroupId(
     private val startOffsetPolicy: StartOffsetPolicy,
     private val autoStopPolicy: AutoStopPolicy
 ) {
+    private val logger = LoggerFactory.getLogger(TransactionManager::class.java)
     private val delegate: KafkaConsumer<ByteArray, ByteArray> = KafkaConsumer(clientProperties, ByteArrayDeserializer(), ByteArrayDeserializer())
     private var running = false
     private var stopRequested: Boolean = false
@@ -33,22 +34,44 @@ public class KafkaFlowConsumerWithGroupId(
     private var assignment: List<TopicPartition> = emptyList()
     private val partitionChangedMessages = mutableListOf<PartitionChangedMessage<Unit, Unit, Unit, Unit>>()
     private val delegateMutex = Mutex()
+    private val pollDuration = 10.milliseconds()
+    public val isRunning: Boolean
+        get() = running
 
-    public suspend fun startConsuming(): Flow<KafkaMessage<Unit, Unit, Unit, Unit>> = flow {
+    public suspend fun startConsuming(): Flow<KafkaMessage<Unit, Unit, Unit, Unit>> {
         subscribe()
-        emit(StartConsuming())
-        while (!shouldStop()) {
-            val records = delegateMutex.withLock { delegate.poll(Duration.ZERO) }
-            partitionChangedMessages.forEach { emit(it) }
-            partitionChangedMessages.clear()
-            records.map { Record(it, Unit, Unit, Unit, Unit) }.forEach { emit(it) }
-            if (records.isEmpty) delay(10)
-            if (!records.isEmpty) emit(EndOfBatch())
+        return createConsumerChannel()
+            .consumeAsFlow()
+            .onCompletion {
+                emit(StopConsuming())
+                delegateMutex.withLock { delegate.close() }
+            }
+    }
+
+    private suspend fun createConsumerChannel(): Channel<KafkaMessage<Unit, Unit, Unit, Unit>> {
+        val channel = Channel<KafkaMessage<Unit, Unit, Unit, Unit>>()
+        CoroutineScope(currentCoroutineContext()).launch(Dispatchers.IO) {
+            try {
+                channel.send(StartConsuming(this@KafkaFlowConsumerWithGroupId))
+                while (!shouldStop()) {
+                    val records = delegateMutex.withLock { delegate.poll(pollDuration) }
+                    partitionChangedMessages.forEach { channel.send(it) }
+                    partitionChangedMessages.clear()
+                    records.map { Record(it, Unit, Unit, Unit, Unit, null) }.forEach { channel.send(it) }
+                    if (records.isEmpty) yield()
+                    if (!records.isEmpty) channel.send(EndOfBatch())
+                }
+//                channel.send(StopConsuming())
+                channel.close()
+            } catch (t: CancellationException) {
+            } catch (t: Throwable) {
+                t.printStackTrace()
+            } finally {
+                running = false
+                channel.close()
+            }
         }
-        emit(StopConsuming())
-    }.onCompletion {
-        delegateMutex.withLock { delegate.close() }
-        running = false
+        return channel
     }
 
     private suspend fun shouldStop(): Boolean {
@@ -136,4 +159,22 @@ public class KafkaFlowConsumerWithGroupId(
             delegate.seek(it, offsetsForTime[it]?.offset() ?: endOffsets[it] ?: 0)
         }
     }
+
+    public suspend fun commit(commitOffsets: Map<TopicPartition, OffsetAndMetadata>): Unit = delegateMutex.withLock {
+        delegate.commitAsync(commitOffsets) { offsets, exception ->
+            if (exception != null) {
+                logger.warn("Error while committing offsets ($offsets)", exception)
+            }
+        }
+    }
+
+    public suspend fun rollback(topicPartitionToRollback: Set<TopicPartition>) {
+        delegateMutex.withLock {
+            val committedOffsets = delegate.committed(topicPartitionToRollback)
+            topicPartitionToRollback.forEach { topicPartition ->
+                delegate.seek(topicPartition, committedOffsets[topicPartition]?.offset() ?: 0)
+            }
+        }
+    }
+
 }
