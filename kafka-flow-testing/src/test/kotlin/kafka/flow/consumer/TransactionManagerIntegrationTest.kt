@@ -1,10 +1,12 @@
 package kafka.flow.consumer
 
 import kafka.flow.TopicDescriptor
-import kafka.flow.consumer.with.group.id.KafkaFlowConsumerWithGroupId
+import kafka.flow.consumer.with.group.id.KafkaFlowConsumerWithGroupIdImpl
 import kafka.flow.consumer.with.group.id.createTransactions
+import kafka.flow.consumer.with.group.id.onEachRecord
+import kafka.flow.consumer.with.group.id.values
 import kafka.flow.producer.KafkaFlowTopicProducer
-import kafka.flow.server.Server
+import kafka.flow.server.KafkaServer
 import kafka.flow.testing.Await
 import kafka.flow.testing.TestObject
 import kafka.flow.testing.TestTopicDescriptor
@@ -33,14 +35,14 @@ import java.util.*
 class TransactionManagerIntegrationTest {
     private lateinit var topic: TopicDescriptor<TestObject.Key, String, TestObject>
     private lateinit var producer: KafkaFlowTopicProducer<TestObject.Key, String, TestObject>
-    private var consumer: KafkaFlowConsumerWithGroupId? = null
+    private var consumer: KafkaFlowConsumerWithGroupIdImpl? = null
     var groupId = "test-client-${UUID.randomUUID()}"
     val admin = AdminClient.create(properties())
 
     @Before
     fun createTestTopic() {
         topic = TestTopicDescriptor.next()
-        producer = server.on(topic)
+        producer = kafkaServer.on(topic)
         admin.createTopics(listOf(NewTopic(topic.name, 12, 1))).all().get()
         groupId = "test-client-${UUID.randomUUID()}"
     }
@@ -52,11 +54,11 @@ class TransactionManagerIntegrationTest {
 
     @Test
     fun committingTransaction_changesCommittedOffsets(): Unit = runTest {
-        consumer = KafkaFlowConsumerWithGroupId(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
+        consumer = KafkaFlowConsumerWithGroupIdImpl(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
 
         launch {
             consumer!!.startConsuming()
-                .createTransactions(10, 1.second()).onEachRecord { it.transaction?.unlock() }.collect()
+                .createTransactions(10, 1.second()).onEachRecord { it.transaction.unlock() }.collect()
         }
 
         repeat(10) { producer.send(TestObject.random()) }
@@ -68,11 +70,11 @@ class TransactionManagerIntegrationTest {
 
     @Test
     fun committingTransactionOnStopConsumer_changesCommittedOffsets(): Unit = runTest {
-        consumer = KafkaFlowConsumerWithGroupId(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
+        consumer = KafkaFlowConsumerWithGroupIdImpl(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
 
         launch {
             consumer!!.startConsuming()
-                .createTransactions(10, 1.second()).onEachRecord { it.transaction?.unlock() }.values().take(10).collect()
+                .createTransactions(10, 1.second()).onEachRecord { it.transaction.unlock() }.values().take(10).collect()
         }
 
         repeat(20) { producer.send(TestObject.random()) }
@@ -80,6 +82,40 @@ class TransactionManagerIntegrationTest {
         Await().untilAsserted {
             val committedOffsets: Map<TopicPartition, Long> = admin.listConsumerGroupOffsets(groupId).partitionsToOffsetAndMetadata().get().mapValues { (_, value) -> value.offset() }
             expectThat(committedOffsets.values.sum()).isEqualTo(10)
+        }
+    }
+
+
+    @Test
+    fun rollbackTransaction_triggersRetry(): Unit = runTest {
+        consumer = KafkaFlowConsumerWithGroupIdImpl(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
+
+        var failedRecord: TestObject? = null
+        var successRecord: TestObject? = null
+        val expected: TestObject = TestObject.random()
+
+        launch {
+            consumer!!.startConsuming()
+                .deserializeUsing(topic)
+                .createTransactions(10, 1.second()).onEachRecord {
+                    if (failedRecord == null) {
+                        failedRecord = it.value
+                        it.transaction.rollback()
+                    } else {
+                        successRecord = it.value
+                        it.transaction.unlock()
+                    }
+                }
+                .collect()
+        }
+
+        producer.send(expected)
+
+        Await().untilAsserted {
+            expectThat(failedRecord).isEqualTo(expected)
+            expectThat(successRecord).isEqualTo(expected)
+            val committedOffsets: Map<TopicPartition, Long> = admin.listConsumerGroupOffsets(groupId).partitionsToOffsetAndMetadata().get().mapValues { (_, value) -> value.offset() }
+            expectThat(committedOffsets.values.sum()).isEqualTo(1)
         }
     }
 
@@ -114,13 +150,13 @@ class TransactionManagerIntegrationTest {
 
     companion object {
         private val kafka: KafkaContainer = KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:6.2.0"))
-        private lateinit var server: Server
+        private lateinit var kafkaServer: KafkaServer
 
         @JvmStatic
         @BeforeClass
         fun setup() {
             kafka.start()
-            server = Server { bootstrapUrl = kafka.bootstrapServers }
+            kafkaServer = KafkaServer { bootstrapUrl = kafka.bootstrapServers }
         }
     }
 }

@@ -1,9 +1,9 @@
 package kafka.flow.consumer
 
 import kafka.flow.TopicDescriptor
-import kafka.flow.consumer.with.group.id.KafkaFlowConsumerWithGroupId
+import kafka.flow.consumer.with.group.id.KafkaFlowConsumerWithGroupIdImpl
 import kafka.flow.producer.KafkaFlowTopicProducer
-import kafka.flow.server.Server
+import kafka.flow.server.KafkaServer
 import kafka.flow.testing.Await
 import kafka.flow.testing.TestObject
 import kafka.flow.testing.TestTopicDescriptor
@@ -33,12 +33,12 @@ import java.util.*
 class GroupIdClientIntegrationTest {
     private lateinit var topic: TopicDescriptor<TestObject.Key, String, TestObject>
     private lateinit var producer: KafkaFlowTopicProducer<TestObject.Key, String, TestObject>
-    private var consumer: KafkaFlowConsumerWithGroupId? = null
+    private var consumer: KafkaFlowConsumerWithGroupIdImpl? = null
 
     @Before
     fun createTestTopic() {
         topic = TestTopicDescriptor.next()
-        producer = server.on(topic)
+        producer = kafkaServer.on(topic)
         val admin = AdminClient.create(properties())
         admin.createTopics(listOf(NewTopic(topic.name, 12, 1))).all().get()
     }
@@ -50,7 +50,7 @@ class GroupIdClientIntegrationTest {
 
     @Test
     fun subscribeFromBeginning_readAllMessages(): Unit = runTest {
-        consumer = KafkaFlowConsumerWithGroupId(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
+        consumer = KafkaFlowConsumerWithGroupIdImpl(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
         var count = 0
         launch {
             consumer!!
@@ -73,7 +73,7 @@ class GroupIdClientIntegrationTest {
         repeat(10) { producer.send(TestObject.random()) }
         delay(1000)
 
-        consumer = KafkaFlowConsumerWithGroupId(properties(), listOf(topic.name), StartOffsetPolicy.latest(), AutoStopPolicy.whenUpToDate())
+        consumer = KafkaFlowConsumerWithGroupIdImpl(properties(), listOf(topic.name), StartOffsetPolicy.latest(), AutoStopPolicy.whenUpToDate())
         val count = consumer!!.startConsuming().values().count()
 
         expectThat(count).describedAs("count").isEqualTo(0)
@@ -83,7 +83,7 @@ class GroupIdClientIntegrationTest {
     fun stopReading_closeConsumer(): Unit = runTest {
         repeat(10) { producer.send(TestObject.random()) }
 
-        consumer = KafkaFlowConsumerWithGroupId(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
+        consumer = KafkaFlowConsumerWithGroupIdImpl(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
 
         var count = 0
         launch {
@@ -93,7 +93,7 @@ class GroupIdClientIntegrationTest {
         }
 
         Await().untilAsserted {
-            expectThat(consumer!!).get("isRunning") { isRunning }.isEqualTo(false)
+            expectThat(consumer!!).get("isRunning") { isRunning() }.isEqualTo(false)
             expectThat(count).describedAs("count").isEqualTo(3)
         }
         consumer!!.stop()
@@ -101,7 +101,7 @@ class GroupIdClientIntegrationTest {
 
     @Test
     fun sendBatches_continueReceiving(): Unit = runTest {
-        consumer = KafkaFlowConsumerWithGroupId(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
+        consumer = KafkaFlowConsumerWithGroupIdImpl(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
         var count = 0
         launch {
             consumer!!.startConsuming().values().collect { count++ }
@@ -122,8 +122,8 @@ class GroupIdClientIntegrationTest {
 
     @Test
     fun multiplesConsumers_AssignmentSpread() = runBlocking {
-        val consumer1 = KafkaFlowConsumerWithGroupId(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
-        val consumer2 = KafkaFlowConsumerWithGroupId(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
+        val consumer1 = KafkaFlowConsumerWithGroupIdImpl(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
+        val consumer2 = KafkaFlowConsumerWithGroupIdImpl(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
         try {
             var assignment1: List<TopicPartition> = emptyList()
             var assignment2: List<TopicPartition> = emptyList()
@@ -164,7 +164,7 @@ class GroupIdClientIntegrationTest {
 
     @Test
     fun sendTestObject_expectSameObject() = runTest {
-        consumer = KafkaFlowConsumerWithGroupId(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
+        consumer = KafkaFlowConsumerWithGroupIdImpl(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
 
         var record: TestObject? = null
         launch {
@@ -199,13 +199,13 @@ class GroupIdClientIntegrationTest {
 
     companion object {
         private val kafka: KafkaContainer = KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:6.2.0"))
-        private lateinit var server: Server
+        private lateinit var kafkaServer: KafkaServer
 
         @JvmStatic
         @BeforeClass
         fun setup() {
             kafka.start()
-            server = Server { bootstrapUrl = kafka.bootstrapServers }
+            kafkaServer = KafkaServer { bootstrapUrl = kafka.bootstrapServers }
         }
     }
 }

@@ -5,7 +5,7 @@ import kafka.flow.producer.KafkaFlowTopicProducer
 import org.apache.kafka.clients.CommonClientConfigs
 import java.util.*
 
-public data class Server(private val config: Properties) {
+public data class KafkaServer(private val config: Properties) {
 
     public constructor(block: ServerBuilder.() -> Unit) : this(ServerBuilder().apply(block).build())
     public constructor(bootstrapUrl: String) : this(ServerBuilder().apply { this.bootstrapUrl = bootstrapUrl }.build())
@@ -18,6 +18,15 @@ public data class Server(private val config: Properties) {
         @Suppress("UNCHECKED_CAST")
         return producer as KafkaFlowTopicProducer<Key, PartitionKey, Value>
     }
+
+    public fun <Key, PartitionKey, Value> from(topicDescriptor: TopicDescriptor<Key, PartitionKey, Value>): KafkaFlowTopicReaderBuilder<Key, PartitionKey, Value> {
+        return KafkaFlowTopicReaderBuilder(topicDescriptor, config)
+    }
+
+    public fun admin(): KafkaAdministration {
+        return KafkaAdministration(config)
+    }
+
 
     public class ServerBuilder {
         public var bootstrapUrl: String? = null

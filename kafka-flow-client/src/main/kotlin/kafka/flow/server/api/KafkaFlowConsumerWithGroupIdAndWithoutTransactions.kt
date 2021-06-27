@@ -1,0 +1,37 @@
+package kafka.flow.server.api
+
+import kafka.flow.TopicDescriptor
+import kafka.flow.consumer.AutoStopPolicy
+import kafka.flow.consumer.KafkaMessage
+import kafka.flow.consumer.StartOffsetPolicy
+import kafka.flow.consumer.deserializeUsing
+import kafka.flow.consumer.with.group.id.KafkaFlowConsumerWithGroupId
+import kafka.flow.consumer.with.group.id.KafkaFlowConsumerWithGroupIdImpl
+import kotlinx.coroutines.flow.Flow
+import org.apache.kafka.clients.consumer.OffsetAndMetadata
+import org.apache.kafka.common.TopicPartition
+import java.util.*
+
+public class KafkaFlowConsumerWithGroupIdAndWithoutTransactions<Key, PartitionKey, Value>(
+    clientProperties: Properties,
+    private val topicDescriptor: TopicDescriptor<Key, PartitionKey, Value>,
+    startOffsetPolicy: StartOffsetPolicy,
+    autoStopPolicy: AutoStopPolicy,
+) : KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit>> {
+    private val delegate = KafkaFlowConsumerWithGroupIdImpl(clientProperties, listOf(topicDescriptor.name), startOffsetPolicy, autoStopPolicy)
+
+    override suspend fun startConsuming(onDeserializationException: suspend (Throwable) -> Unit): Flow<KafkaMessage<Key, PartitionKey, Value?, Unit>> {
+        return delegate
+            .startConsuming()
+            .deserializeUsing(topicDescriptor, onDeserializationException)
+    }
+
+    override fun stop(): Unit = delegate.stop()
+    override fun isRunning(): Boolean = delegate.isRunning()
+    override suspend fun isUpToDate(): Boolean = delegate.isUpToDate()
+    override suspend fun lag(): Long = delegate.lag()
+    override suspend fun commit(commitOffsets: Map<TopicPartition, OffsetAndMetadata>): Unit = delegate.commit(commitOffsets)
+    override suspend fun rollback(topicPartitionToRollback: Set<TopicPartition>): Unit = delegate.rollback(topicPartitionToRollback)
+    override fun close(): Unit = delegate.close()
+
+}

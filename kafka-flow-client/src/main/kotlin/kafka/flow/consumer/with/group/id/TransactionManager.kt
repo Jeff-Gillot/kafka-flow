@@ -47,7 +47,7 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
         }
     }
 
-    public suspend fun rollbackAndCommit(client: KafkaFlowConsumerWithGroupId) {
+    public suspend fun rollbackAndCommit(client: KafkaFlowConsumerWithGroupIdImpl) {
         client.rollback(getPartitionsToRollback())
         client.commit(getOffsetsToCommit())
     }
