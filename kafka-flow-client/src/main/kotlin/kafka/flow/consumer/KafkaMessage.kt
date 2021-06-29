@@ -42,7 +42,7 @@ public data class PartitionsRevoked<Key, PartitionKey, Value, Output>(
 ) : PartitionChangedMessage<Key, PartitionKey, Value, Output>
 
 public interface FlowControlMessage<Key, PartitionKey, Value, Output> : KafkaMessage<Key, PartitionKey, Value, Output>, KafkaMessageWithTransaction<Key, PartitionKey, Value, Output>
-public data class StartConsuming<Key, PartitionKey, Value, Output>(public val client: KafkaFlowConsumerWithGroupIdImpl) : FlowControlMessage<Key, PartitionKey, Value, Output>
+public data class StartConsuming<Key, PartitionKey, Value, Output>(public val client: KafkaFlowConsumer<KafkaMessage<Unit, Unit, Unit, Unit>>) : FlowControlMessage<Key, PartitionKey, Value, Output>
 public class StopConsuming<Key, PartitionKey, Value, Output> : FlowControlMessage<Key, PartitionKey, Value, Output>
 public class EndOfBatch<Key, PartitionKey, Value, Output> : FlowControlMessage<Key, PartitionKey, Value, Output>
 

@@ -5,11 +5,10 @@ import kafka.flow.producer.KafkaFlowTopicProducer
 import org.apache.kafka.clients.CommonClientConfigs
 import java.util.*
 
-public data class KafkaServer(private val config: Properties) {
+public open class KafkaServer(private val config: Properties) {
 
     public constructor(block: ServerBuilder.() -> Unit) : this(ServerBuilder().apply(block).build())
     public constructor(bootstrapUrl: String) : this(ServerBuilder().apply { this.bootstrapUrl = bootstrapUrl }.build())
-
 
     private val producers = mutableMapOf<TopicDescriptor<*, *, *>, KafkaFlowTopicProducer<*, *, *>>()
 
@@ -26,6 +25,8 @@ public data class KafkaServer(private val config: Properties) {
     public fun admin(): KafkaAdministration {
         return KafkaAdministration(config)
     }
+
+    public fun properties(): Properties = Properties().apply { putAll(config) }
 
 
     public class ServerBuilder {

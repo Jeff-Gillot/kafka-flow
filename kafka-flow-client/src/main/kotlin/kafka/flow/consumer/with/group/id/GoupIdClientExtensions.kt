@@ -2,18 +2,24 @@
 
 package kafka.flow.consumer.with.group.id
 
+import be.delta.flow.time.seconds
+import kafka.flow.TopicDescriptor
 import kafka.flow.consumer.*
+import kafka.flow.consumer.without.group.id.onStartConsuming
 import kafka.flow.producer.KafkaOutput
 import kafka.flow.producer.TopicDescriptorRecord
-import kafka.flow.utils.seconds
+import kafka.flow.server.KafkaServer
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import org.apache.kafka.common.TopicPartition
 import java.time.Duration
 
-public suspend fun <Key, Partition, Value, Output> Flow<KafkaMessage<Key, Partition, Value, Output>>.createTransactions(maxOpenTransactions: Int = 1024, commitInterval: Duration = 30.seconds()): Flow<KafkaMessageWithTransaction<Key, Partition, Value, Output>> {
+public suspend fun <Key, Partition, Value, Output> Flow<KafkaMessage<Key, Partition, Value, Output>>.createTransactions(
+    maxOpenTransactions: Int = 1024,
+    commitInterval: Duration = 30.seconds()
+): Flow<KafkaMessageWithTransaction<Key, Partition, Value, Output>> {
     val transactionManager = TransactionManager(maxOpenTransactions)
-    var client: KafkaFlowConsumerWithGroupIdImpl? = null
+    var client: KafkaFlowConsumerWithGroupId<*>? = null
     var commitLoop: Job? = null
     return this
         .onCompletion {
@@ -21,6 +27,7 @@ public suspend fun <Key, Partition, Value, Output> Flow<KafkaMessage<Key, Partit
             client?.let { transactionManager.rollbackAndCommit(it) }
         }
         .onStartConsuming {
+            require(it.client is KafkaFlowConsumerWithGroupId) { "You can only create transactions on a groupId client" }
             client = it.client
             commitLoop = CoroutineScope(currentCoroutineContext()).launch {
                 while (true) {
@@ -52,11 +59,11 @@ public fun <Key, Partition, Value, Output> Flow<KafkaMessageWithTransaction<Key,
         .map { it.value }
 }
 
-public fun <Key, Partition, Value, Output> Flow<KafkaMessageWithTransaction<Key, Partition, Value, Unit>>.transformValueToOutput(block: suspend (Value) -> Output):
+public fun <Key, Partition, Value, Output> Flow<KafkaMessageWithTransaction<Key, Partition, Value, Unit>>.mapValueToOutput(block: suspend (Value) -> Output):
         Flow<KafkaMessageWithTransaction<Key, Partition, Value, Output>> {
     return map { message ->
         if (message is RecordWithTransaction) {
-            RecordWithTransaction<Key, Partition, Value, Output>(
+            RecordWithTransaction(
                 message.consumerRecord,
                 message.key,
                 message.partitionKey,

@@ -1,16 +1,17 @@
 package kafka.flow.consumer
 
+import be.delta.flow.time.second
 import kafka.flow.TopicDescriptor
 import kafka.flow.consumer.with.group.id.KafkaFlowConsumerWithGroupIdImpl
 import kafka.flow.consumer.with.group.id.createTransactions
 import kafka.flow.consumer.with.group.id.onEachRecord
 import kafka.flow.consumer.with.group.id.values
+import kafka.flow.consumer.without.group.id.deserializeUsing
 import kafka.flow.producer.KafkaFlowTopicProducer
 import kafka.flow.server.KafkaServer
 import kafka.flow.testing.Await
 import kafka.flow.testing.TestObject
 import kafka.flow.testing.TestTopicDescriptor
-import kafka.flow.utils.second
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.take

@@ -2,25 +2,25 @@ package kafka.flow.server.api
 
 import kafka.flow.TopicDescriptor
 import kafka.flow.consumer.*
-import kafka.flow.consumer.KafkaFlowConsumerWithGroupId
-import kafka.flow.consumer.with.group.id.KafkaFlowConsumerWithGroupIdImpl
+import kafka.flow.consumer.KafkaFlowConsumerWithoutGroupId
+import kafka.flow.consumer.without.group.id.KafkaFlowConsumerWithoutGroupIdImpl
 import kafka.flow.consumer.without.group.id.deserializeUsing
+import kafka.flow.utils.allPartitions
 import kotlinx.coroutines.flow.Flow
-import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
 import java.util.*
 
-public class KafkaFlowConsumerWithGroupIdAndWithoutTransactions<Key, PartitionKey, Value>(
+public class KafkaFlowConsumerWithoutGroupId<Key, PartitionKey, Value>(
     clientProperties: Properties,
     private val topicDescriptor: TopicDescriptor<Key, PartitionKey, Value>,
+    private val assignment: List<TopicPartition>,
     startOffsetPolicy: StartOffsetPolicy,
     autoStopPolicy: AutoStopPolicy,
-) : KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit>> {
-    private val delegate = KafkaFlowConsumerWithGroupIdImpl(clientProperties, listOf(topicDescriptor.name), startOffsetPolicy, autoStopPolicy)
+) : KafkaFlowConsumerWithoutGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit>> {
+    private val delegate = KafkaFlowConsumerWithoutGroupIdImpl(clientProperties, topicDescriptor.allPartitions(), startOffsetPolicy, autoStopPolicy)
 
     override suspend fun startConsuming(onDeserializationException: suspend (Throwable) -> Unit): Flow<KafkaMessage<Key, PartitionKey, Value?, Unit>> {
-        return delegate
-            .startConsuming()
+        return delegate.startConsuming()
             .deserializeUsing(topicDescriptor, onDeserializationException)
     }
 
@@ -28,8 +28,5 @@ public class KafkaFlowConsumerWithGroupIdAndWithoutTransactions<Key, PartitionKe
     override fun isRunning(): Boolean = delegate.isRunning()
     override suspend fun isUpToDate(): Boolean = delegate.isUpToDate()
     override suspend fun lag(): Long = delegate.lag()
-    override suspend fun commit(commitOffsets: Map<TopicPartition, OffsetAndMetadata>): Unit = delegate.commit(commitOffsets)
-    override suspend fun rollback(topicPartitionToRollback: Set<TopicPartition>): Unit = delegate.rollback(topicPartitionToRollback)
     override fun close(): Unit = delegate.close()
-
 }

@@ -1,47 +1,175 @@
 package kafka.flow.server.api
 
+import be.delta.flow.time.seconds
 import kafka.flow.TopicDescriptor
-import kafka.flow.consumer.AutoStopPolicy
-import kafka.flow.consumer.KafkaMessageWithTransaction
-import kafka.flow.consumer.StartOffsetPolicy
-import kafka.flow.consumer.with.group.id.KafkaFlowConsumerWithGroupId
-import kafka.flow.utils.seconds
+import kafka.flow.consumer.*
+import kafka.flow.utils.allPartitions
 import org.apache.kafka.clients.consumer.ConsumerConfig
+import org.apache.kafka.common.TopicPartition
 import java.time.Duration
 import java.time.Instant
 import java.util.*
 
 
 public class ConsumerBuilderStep1GroupId<Key, PartitionKey, Value> internal constructor(private val consumerBuilderConfig: ConsumerBuilderConfig<Key, PartitionKey, Value>) {
-    public fun withGroupId(groupId: String): ConsumerBuilderStep2FromWithGroupId<Key, PartitionKey, Value> = ConsumerBuilderStep2FromWithGroupId(consumerBuilderConfig.copy(groupId = groupId))
-    public fun withoutGroupId(groupId: String): Unit = TODO()
+    public fun withGroupId(groupId: String): ConsumerBuilderStep2FromWithGroupId<Key, PartitionKey, Value> =
+        ConsumerBuilderStep2FromWithGroupId(consumerBuilderConfig.copy(groupId = groupId))
+
+    public fun withoutGroupId(): ConsumerBuilderStep2FromWithoutGroupId<Key, PartitionKey, Value> =
+        ConsumerBuilderStep2FromWithoutGroupId(consumerBuilderConfig)
 }
 
 public class ConsumerBuilderStep2FromWithGroupId<Key, PartitionKey, Value> internal constructor(private val consumerBuilderConfig: ConsumerBuilderConfig<Key, PartitionKey, Value>) {
     public fun autoOffsetResetEarliest(maxOpenTransactions: Int = 1024, commitInterval: Duration = 30.seconds()): ConsumerBuilderStep3AutoStopWithGroupIdAndTransaction<Key, PartitionKey, Value> =
-        ConsumerBuilderStep3AutoStopWithGroupIdAndTransaction(consumerBuilderConfig.copy(startOffsetPolicy = StartOffsetPolicy.earliest(), maxOpenTransactions = maxOpenTransactions, commitInterval = commitInterval))
+        ConsumerBuilderStep3AutoStopWithGroupIdAndTransaction(
+            consumerBuilderConfig.copy(
+                startOffsetPolicy = StartOffsetPolicy.earliest(),
+                maxOpenTransactions = maxOpenTransactions,
+                commitInterval = commitInterval
+            )
+        )
 
     public fun autoOffsetResetLatest(maxOpenTransactions: Int = 1024, commitInterval: Duration = 30.seconds()): ConsumerBuilderStep3AutoStopWithGroupIdAndTransaction<Key, PartitionKey, Value> =
-        ConsumerBuilderStep3AutoStopWithGroupIdAndTransaction(consumerBuilderConfig.copy(startOffsetPolicy = StartOffsetPolicy.latest(), maxOpenTransactions = maxOpenTransactions, commitInterval = commitInterval))
+        ConsumerBuilderStep3AutoStopWithGroupIdAndTransaction(
+            consumerBuilderConfig.copy(
+                startOffsetPolicy = StartOffsetPolicy.latest(),
+                maxOpenTransactions = maxOpenTransactions,
+                commitInterval = commitInterval
+            )
+        )
 
-    public fun startFromSpecificTime(offsetTime: Instant): Unit = TODO()
-    public fun startFromSpecificTimeOffsetFromNow(duration: Duration): Unit = TODO()
+    public fun startFromSpecificTime(offsetTime: Instant): ConsumerBuilderStep3AutoStopWithGroupIdAndWithoutTransaction<Key, PartitionKey, Value> =
+        ConsumerBuilderStep3AutoStopWithGroupIdAndWithoutTransaction(consumerBuilderConfig.copy(startOffsetPolicy = StartOffsetPolicy.specificTime(offsetTime)))
+
+    public fun startFromSpecificTimeOffsetFromNow(duration: Duration): ConsumerBuilderStep3AutoStopWithGroupIdAndWithoutTransaction<Key, PartitionKey, Value> =
+        ConsumerBuilderStep3AutoStopWithGroupIdAndWithoutTransaction(consumerBuilderConfig.copy(startOffsetPolicy = StartOffsetPolicy.specificOffsetFromNow(duration)))
+}
+
+public class ConsumerBuilderStep2FromWithoutGroupId<Key, PartitionKey, Value> internal constructor(private val consumerBuilderConfig: ConsumerBuilderConfig<Key, PartitionKey, Value>) {
+    public fun startFromEarliest(): ConsumerBuilderStep3AutoStopWithoutGroupId<Key, PartitionKey, Value> =
+        startFromPolicy(StartOffsetPolicy.earliest())
+
+    public fun startFromLatest(): ConsumerBuilderStep3AutoStopWithoutGroupId<Key, PartitionKey, Value> =
+        startFromPolicy(StartOffsetPolicy.latest())
+
+    public fun startFromSpecificTime(offsetTime: Instant): ConsumerBuilderStep3AutoStopWithoutGroupId<Key, PartitionKey, Value> =
+        startFromPolicy(StartOffsetPolicy.specificTime(offsetTime))
+
+    public fun startFromSpecificTimeOffsetFromNow(duration: Duration): ConsumerBuilderStep3AutoStopWithoutGroupId<Key, PartitionKey, Value> =
+        startFromPolicy(StartOffsetPolicy.specificOffsetFromNow(duration))
+
+    public fun startFromPolicy(startOffsetPolicy: StartOffsetPolicy): ConsumerBuilderStep3AutoStopWithoutGroupId<Key, PartitionKey, Value> =
+        ConsumerBuilderStep3AutoStopWithoutGroupId(consumerBuilderConfig.copy(startOffsetPolicy = startOffsetPolicy))
 }
 
 public class ConsumerBuilderStep3AutoStopWithGroupIdAndTransaction<Key, PartitionKey, Value> internal constructor(private val consumerBuilderConfig: ConsumerBuilderConfig<Key, PartitionKey, Value>) {
-    public fun consumeUntilStopped(): KafkaFlowConsumerWithGroupId<KafkaMessageWithTransaction<Key, PartitionKey, Value?, Unit>> = consumer(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.never()))
-    public fun consumeUntilUpToDate(): KafkaFlowConsumerWithGroupId<KafkaMessageWithTransaction<Key, PartitionKey, Value?, Unit>> = consumer(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.whenUpToDate()))
-    public fun consumerUntilSpecifiedTime(stopTime: Instant): KafkaFlowConsumerWithGroupId<KafkaMessageWithTransaction<Key, PartitionKey, Value?, Unit>> = consumer(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.atSpecificTime(stopTime)))
-    public fun consumerUntilSpecifiedOffsetFromNow(duration: Duration): KafkaFlowConsumerWithGroupId<KafkaMessageWithTransaction<Key, PartitionKey, Value?, Unit>> = consumer(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.specificOffsetFromNow(duration)))
+    public fun consumeUntilStopped(): KafkaFlowConsumerWithGroupId<KafkaMessageWithTransaction<Key, PartitionKey, Value?, Unit>> =
+        consumer(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.never()))
+
+    public fun consumeUntilUpToDate(): KafkaFlowConsumerWithGroupId<KafkaMessageWithTransaction<Key, PartitionKey, Value?, Unit>> =
+        consumer(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.whenUpToDate()))
+
+    public fun consumerUntilSpecifiedTime(stopTime: Instant): KafkaFlowConsumerWithGroupId<KafkaMessageWithTransaction<Key, PartitionKey, Value?, Unit>> =
+        consumer(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.atSpecificTime(stopTime)))
+
+    public fun consumerUntilSpecifiedOffsetFromNow(duration: Duration): KafkaFlowConsumerWithGroupId<KafkaMessageWithTransaction<Key, PartitionKey, Value?, Unit>> =
+        consumer(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.specificOffsetFromNow(duration)))
 
     private fun consumer(builderConfig: ConsumerBuilderConfig<Key, PartitionKey, Value>): KafkaFlowConsumerWithGroupIdAndTransactions<Key, PartitionKey, Value> {
-        return KafkaFlowConsumerWithGroupIdAndTransactions(properties(), builderConfig.topicDescriptor, builderConfig.startOffsetPolicy!!, builderConfig.autoStopPolicy!!, builderConfig.maxOpenTransactions!!, builderConfig.commitInterval!!)
+        return KafkaFlowConsumerWithGroupIdAndTransactions(
+            properties(),
+            builderConfig.topicDescriptor,
+            builderConfig.startOffsetPolicy!!,
+            builderConfig.autoStopPolicy!!,
+            builderConfig.maxOpenTransactions!!,
+            builderConfig.commitInterval!!
+        )
     }
 
     private fun properties(): Properties {
         val properties = Properties()
         properties.putAll(consumerBuilderConfig.serverProperties)
         properties[ConsumerConfig.GROUP_ID_CONFIG] = consumerBuilderConfig.groupId
+        properties[ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG] = "false"
+        return properties
+    }
+}
+
+public class ConsumerBuilderStep3AutoStopWithGroupIdAndWithoutTransaction<Key, PartitionKey, Value> internal constructor(private val consumerBuilderConfig: ConsumerBuilderConfig<Key, PartitionKey, Value>) {
+    public fun consumeUntilStopped(): KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit>> =
+        consumer(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.never()))
+
+    public fun consumeUntilUpToDate(): KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit>> =
+        consumer(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.whenUpToDate()))
+
+    public fun consumerUntilSpecifiedTime(stopTime: Instant): KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit>> =
+        consumer(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.atSpecificTime(stopTime)))
+
+    public fun consumerUntilSpecifiedOffsetFromNow(duration: Duration): KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit>> =
+        consumer(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.specificOffsetFromNow(duration)))
+
+    private fun consumer(builderConfig: ConsumerBuilderConfig<Key, PartitionKey, Value>): KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit>> {
+        return KafkaFlowConsumerWithGroupIdAndWithoutTransactions(
+            properties(),
+            builderConfig.topicDescriptor,
+            builderConfig.startOffsetPolicy!!,
+            builderConfig.autoStopPolicy!!,
+        )
+    }
+
+    private fun properties(): Properties {
+        val properties = Properties()
+        properties.putAll(consumerBuilderConfig.serverProperties)
+        properties[ConsumerConfig.GROUP_ID_CONFIG] = consumerBuilderConfig.groupId
+        properties[ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG] = "false"
+        return properties
+    }
+}
+
+public class ConsumerBuilderStep3AutoStopWithoutGroupId<Key, PartitionKey, Value> internal constructor(private val consumerBuilderConfig: ConsumerBuilderConfig<Key, PartitionKey, Value>) {
+    public fun consumeUntilStopped(): ConsumerBuilderStep4PartitionsWithoutGroupId<Key, PartitionKey, Value> =
+        ConsumerBuilderStep4PartitionsWithoutGroupId(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.never()))
+
+    public fun consumeUntilUpToDate(): ConsumerBuilderStep4PartitionsWithoutGroupId<Key, PartitionKey, Value> =
+        ConsumerBuilderStep4PartitionsWithoutGroupId(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.whenUpToDate()))
+
+    public fun consumerUntilSpecifiedTime(stopTime: Instant): ConsumerBuilderStep4PartitionsWithoutGroupId<Key, PartitionKey, Value> =
+        ConsumerBuilderStep4PartitionsWithoutGroupId(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.atSpecificTime(stopTime)))
+
+    public fun consumerUntilSpecifiedOffsetFromNow(duration: Duration): ConsumerBuilderStep4PartitionsWithoutGroupId<Key, PartitionKey, Value> =
+        ConsumerBuilderStep4PartitionsWithoutGroupId(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.specificOffsetFromNow(duration)))
+}
+
+public class ConsumerBuilderStep4PartitionsWithoutGroupId<Key, PartitionKey, Value> internal constructor(private val consumerBuilderConfig: ConsumerBuilderConfig<Key, PartitionKey, Value>) {
+    public fun readSpecificPartitions(partitions: List<Int>): kafka.flow.consumer.KafkaFlowConsumerWithoutGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit>> {
+        partitions.firstOrNull { it < 0 || it >= consumerBuilderConfig.topicDescriptor.partitionNumber }?.let {
+            throw IllegalArgumentException("Invalid partitions numbers it should be between 0 and ${consumerBuilderConfig.topicDescriptor.partitionNumber - 1} found $it")
+        }
+
+        val topicPartitions = partitions.toSet().map { TopicPartition(consumerBuilderConfig.topicDescriptor.name, it) }.toList()
+
+        return consumer(consumerBuilderConfig, topicPartitions)
+    }
+
+    public fun readAllPartitions(): kafka.flow.consumer.KafkaFlowConsumerWithoutGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit>> =
+        consumer(consumerBuilderConfig, consumerBuilderConfig.topicDescriptor.allPartitions())
+
+    private fun consumer(
+        builderConfig: ConsumerBuilderConfig<Key, PartitionKey, Value>,
+        partitions: List<TopicPartition>
+    ): kafka.flow.consumer.KafkaFlowConsumerWithoutGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit>> {
+        return KafkaFlowConsumerWithoutGroupId(
+            properties(),
+            builderConfig.topicDescriptor,
+            partitions,
+            builderConfig.startOffsetPolicy!!,
+            builderConfig.autoStopPolicy!!,
+        )
+    }
+
+    private fun properties(): Properties {
+        val properties = Properties()
+        properties.putAll(consumerBuilderConfig.serverProperties)
         properties[ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG] = "false"
         return properties
     }

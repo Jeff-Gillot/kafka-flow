@@ -1,47 +1,40 @@
-package kafka.flow.consumer.with.group.id
+package kafka.flow.consumer.without.group.id
 
 import be.delta.flow.time.milliseconds
 import be.delta.flow.time.seconds
 import kafka.flow.consumer.*
+import kafka.flow.utils.logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.FlowCollector
-import kotlinx.coroutines.flow.consumeAsFlow
-import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.apache.kafka.clients.consumer.ConsumerConfig
-import org.apache.kafka.clients.consumer.ConsumerRebalanceListener
 import org.apache.kafka.clients.consumer.KafkaConsumer
-import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
-import org.slf4j.LoggerFactory
 import java.time.Instant
 import java.util.*
 import kotlin.coroutines.EmptyCoroutineContext
 
-public class KafkaFlowConsumerWithGroupIdImpl(
+public class KafkaFlowConsumerWithoutGroupIdImpl(
     clientProperties: Properties,
-    private val topics: List<String>,
+    private val assignment: List<TopicPartition>,
     private val startOffsetPolicy: StartOffsetPolicy,
     private val autoStopPolicy: AutoStopPolicy
-) : KafkaFlowConsumerWithGroupId<KafkaMessage<Unit, Unit, Unit, Unit>> {
-    private val properties = properties(clientProperties)
-    private val logger = LoggerFactory.getLogger(TransactionManager::class.java)
+) : KafkaFlowConsumerWithoutGroupId<KafkaMessage<Unit, Unit, Unit, Unit>> {
+    private val logger = logger()
+    private val properties: Properties = Properties().apply { putAll(clientProperties) }
     private val delegate: KafkaConsumer<ByteArray, ByteArray> = KafkaConsumer(properties, ByteArrayDeserializer(), ByteArrayDeserializer())
     private var running = false
     private var stopRequested: Boolean = false
     private var startInstant: Instant? = null
     private var endOffsets: Map<TopicPartition, Long> = emptyMap()
-    private var assignment: List<TopicPartition> = emptyList()
-    private val partitionChangedMessages = mutableListOf<PartitionChangedMessage<Unit, Unit, Unit, Unit>>()
     private val delegateMutex = Mutex()
     private val pollDuration = 10.milliseconds()
 
     init {
-        requireNotNull(clientProperties[ConsumerConfig.GROUP_ID_CONFIG]) { "${ConsumerConfig.GROUP_ID_CONFIG} must be set" }
+        require(clientProperties[ConsumerConfig.GROUP_ID_CONFIG] == null) { "${ConsumerConfig.GROUP_ID_CONFIG} must NOT be set" }
     }
 
     override suspend fun startConsuming(onDeserializationException: suspend (Throwable) -> Unit): Flow<KafkaMessage<Unit, Unit, Unit, Unit>> {
@@ -75,32 +68,12 @@ public class KafkaFlowConsumerWithGroupIdImpl(
         stop()
     }
 
-    override suspend fun commit(commitOffsets: Map<TopicPartition, OffsetAndMetadata>) {
-        delegateMutex.withLock {
-            check(isRunning()) { "Lag cannot be computing when the consumer isn't running" }
-            delegate.commitAsync(commitOffsets) { offsets, exception ->
-                if (exception != null) {
-                    logger.warn("Error while committing offsets ($offsets)", exception)
-                }
-            }
-        }
-    }
-
-    override suspend fun rollback(topicPartitionToRollback: Set<TopicPartition>) {
-        delegateMutex.withLock {
-            check(isRunning()) { "Lag cannot be computing when the consumer isn't running" }
-            val committedOffsets = delegate.committed(topicPartitionToRollback)
-            topicPartitionToRollback.forEach { topicPartition ->
-                delegate.seek(topicPartition, committedOffsets[topicPartition]?.offset() ?: 0)
-            }
-        }
-    }
-
     private suspend fun createConsumerChannel(): Channel<KafkaMessage<Unit, Unit, Unit, Unit>> {
         val channel = Channel<KafkaMessage<Unit, Unit, Unit, Unit>>()
         CoroutineScope(currentCoroutineContext()).launch(Dispatchers.IO) {
             try {
-                channel.send(StartConsuming(this@KafkaFlowConsumerWithGroupIdImpl))
+                channel.send(StartConsuming(this@KafkaFlowConsumerWithoutGroupIdImpl))
+                channel.send(PartitionsAssigned(assignment, assignment))
                 while (!shouldStop()) {
                     fetchAndProcessRecords(channel)
                 }
@@ -117,8 +90,6 @@ public class KafkaFlowConsumerWithGroupIdImpl(
 
     private suspend fun fetchAndProcessRecords(channel: Channel<KafkaMessage<Unit, Unit, Unit, Unit>>) {
         val records = delegateMutex.withLock { delegate.poll(pollDuration) }
-        partitionChangedMessages.forEach { channel.send(it) }
-        partitionChangedMessages.clear()
         records.map { Record(it, Unit, Unit, Unit, Unit) }.forEach { channel.send(it) }
         if (records.isEmpty) yield()
         if (!records.isEmpty) channel.send(EndOfBatch())
@@ -137,10 +108,8 @@ public class KafkaFlowConsumerWithGroupIdImpl(
     private suspend fun subscribe() {
         startInstant = Instant.now()
         delegateMutex.withLock {
-            delegate.subscribe(topics, object : ConsumerRebalanceListener {
-                override fun onPartitionsRevoked(partitions: MutableCollection<TopicPartition>) = partitionRevoked(partitions.toList())
-                override fun onPartitionsAssigned(partitions: MutableCollection<TopicPartition>) = partitionAssigned(partitions.toList())
-            })
+            delegate.assign(assignment)
+            seek()
         }
         running = true
         startEndOffsetsRefreshLoop()
@@ -154,32 +123,20 @@ public class KafkaFlowConsumerWithGroupIdImpl(
                     try {
                         endOffsets = endOffsetConsumer.endOffsets(assignment)
                         delay(10.seconds().toMillis())
-                    } catch (t: Throwable) {
-                        logger.warn("Error while trying to fetch the end offsets", t)
+                    } catch (throwable: Throwable) {
+                        logger.warn("Error while trying to fetch the end offsets", throwable)
                     }
                 }
             }
         }
     }
 
-    private fun partitionAssigned(assignedPartitions: List<TopicPartition>) {
-        assignment = delegate.assignment().toList()
-        seek(assignedPartitions)
-        partitionChangedMessages.add(PartitionsAssigned(assignedPartitions, assignment))
-    }
-
-    private fun partitionRevoked(revokedPartition: List<TopicPartition>) {
-        assignment = delegate.assignment().toList()
-        partitionChangedMessages.add(PartitionsRevoked(revokedPartition, assignment))
-    }
-
-    private fun seek(assignedPartitions: List<TopicPartition>) {
+    private fun seek() {
         when (startOffsetPolicy) {
-            is StartOffsetPolicy.SpecificOffsetFromNow -> seekToSpecifiedTime(assignedPartitions, Instant.now() - startOffsetPolicy.duration)
-            is StartOffsetPolicy.SpecificTime -> seekToSpecifiedTime(assignedPartitions, startOffsetPolicy.offsetTime)
-            StartOffsetPolicy.Earliest, StartOffsetPolicy.Latest -> {
-                // Let the kafka internal client deal with that
-            }
+            is StartOffsetPolicy.SpecificOffsetFromNow -> seekToSpecifiedTime(assignment, Instant.now() - startOffsetPolicy.duration)
+            is StartOffsetPolicy.SpecificTime -> seekToSpecifiedTime(assignment, startOffsetPolicy.offsetTime)
+            StartOffsetPolicy.Earliest -> delegate.seekToBeginning(assignment)
+            StartOffsetPolicy.Latest -> delegate.seekToEnd(assignment)
         }
     }
 
@@ -204,13 +161,4 @@ public class KafkaFlowConsumerWithGroupIdImpl(
             }
         }
     }
-
-    private fun properties(clientProperties: Properties): Properties {
-        val properties = Properties()
-        properties.putAll(clientProperties)
-        if (startOffsetPolicy is StartOffsetPolicy.Earliest) properties[ConsumerConfig.AUTO_OFFSET_RESET_CONFIG] = "earliest"
-        if (startOffsetPolicy is StartOffsetPolicy.Latest) properties[ConsumerConfig.AUTO_OFFSET_RESET_CONFIG] = "latest"
-        return properties
-    }
-
 }

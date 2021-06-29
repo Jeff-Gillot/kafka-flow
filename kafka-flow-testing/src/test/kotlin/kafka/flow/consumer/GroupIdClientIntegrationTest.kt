@@ -2,6 +2,8 @@ package kafka.flow.consumer
 
 import kafka.flow.TopicDescriptor
 import kafka.flow.consumer.with.group.id.KafkaFlowConsumerWithGroupIdImpl
+import kafka.flow.consumer.without.group.id.deserializeValue
+import kafka.flow.consumer.without.group.id.values
 import kafka.flow.producer.KafkaFlowTopicProducer
 import kafka.flow.server.KafkaServer
 import kafka.flow.testing.Await

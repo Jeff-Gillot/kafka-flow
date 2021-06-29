@@ -1,6 +1,7 @@
 package kafka.flow.consumer.with.group.id
 
-import kafka.flow.utils.seconds
+import be.delta.flow.time.seconds
+import kafka.flow.consumer.KafkaFlowConsumerWithGroupId
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -47,7 +48,7 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
         }
     }
 
-    public suspend fun rollbackAndCommit(client: KafkaFlowConsumerWithGroupIdImpl) {
+    public suspend fun rollbackAndCommit(client: KafkaFlowConsumerWithGroupId<*>) {
         client.rollback(getPartitionsToRollback())
         client.commit(getOffsetsToCommit())
     }

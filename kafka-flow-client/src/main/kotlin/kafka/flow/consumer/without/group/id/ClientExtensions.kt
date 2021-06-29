@@ -1,6 +1,12 @@
-package kafka.flow.consumer
+@file:Suppress("UNCHECKED_CAST")
+
+package kafka.flow.consumer.without.group.id
 
 import kafka.flow.TopicDescriptor
+import kafka.flow.consumer.KafkaMessage
+import kafka.flow.consumer.Record
+import kafka.flow.consumer.StartConsuming
+import kafka.flow.consumer.StopConsuming
 import kotlinx.coroutines.flow.*
 
 public suspend fun <Key, Partition, Value, Output> Flow<KafkaMessage<Key, Partition, Value, Output>>.collectValues(block: suspend (Value) -> Unit) {
@@ -9,19 +15,16 @@ public suspend fun <Key, Partition, Value, Output> Flow<KafkaMessage<Key, Partit
 }
 
 public suspend fun <Key, Partition, Value, Output> Flow<KafkaMessage<Key, Partition, Unit, Output>>.deserializeValue(block: suspend (ByteArray) -> Value): Flow<KafkaMessage<Key, Partition, Value, Output>> {
-    return transform { kafkaMessage ->
-        @Suppress("UNCHECKED_CAST")
+    return map { kafkaMessage ->
         when (kafkaMessage) {
-            is Record -> emit(
-                Record(
-                    kafkaMessage.consumerRecord,
-                    kafkaMessage.key,
-                    kafkaMessage.partitionKey,
-                    block.invoke(kafkaMessage.consumerRecord.value()),
-                    kafkaMessage.output
-                )
+            is Record -> Record(
+                kafkaMessage.consumerRecord,
+                kafkaMessage.key,
+                kafkaMessage.partitionKey,
+                block.invoke(kafkaMessage.consumerRecord.value()),
+                kafkaMessage.output
             )
-            else -> emit(kafkaMessage as KafkaMessage<Key, Partition, Value, Output>)
+            else -> kafkaMessage as KafkaMessage<Key, Partition, Value, Output>
         }
     }
 }
@@ -38,7 +41,6 @@ public fun <KeyIn, KeyOut, PartitionIn, PartitionOut, ValueIn, ValueOut, OutputI
         if (message is Record) {
             block.invoke(message)
         } else {
-            @Suppress("UNCHECKED_CAST")
             message as KafkaMessage<KeyOut, PartitionOut, ValueOut, OutputOut>
         }
     }
@@ -65,15 +67,18 @@ public fun <Key, Partition, Value, Output> Flow<KafkaMessage<Key, Partition, Val
     }
 }
 
-public fun <Key, Partition, Value, Output> Flow<KafkaMessage<Unit, Unit, Unit, Output>>.deserializeUsing(topicDescriptor: TopicDescriptor<Key, Partition, Value>, onDeserializationException: suspend (Throwable) -> Unit = { it.printStackTrace() })
+public fun <Key, Partition, Value, Output> Flow<KafkaMessage<Unit, Unit, Unit, Output>>.deserializeUsing(
+    topicDescriptor: TopicDescriptor<Key, Partition, Value>,
+    onDeserializationException: suspend (Throwable) -> Unit = { it.printStackTrace() }
+)
         : Flow<KafkaMessage<Key, Partition, Value?, Output>> {
-    return transform { message ->
+    return mapNotNull { message ->
         if (message is Record) {
             try {
                 val key = topicDescriptor.deserializeKey(message.consumerRecord.key())
                 val partitionKey = topicDescriptor.partitionKey(key)
                 val value = topicDescriptor.deserializeValue(message.consumerRecord.value())
-                emit(Record(message.consumerRecord, key, partitionKey, value, message.output))
+                Record(message.consumerRecord, key, partitionKey, value, message.output)
             } catch (throwable: Throwable) {
                 runCatching {
                     onDeserializationException.invoke(throwable)
@@ -81,10 +86,20 @@ public fun <Key, Partition, Value, Output> Flow<KafkaMessage<Unit, Unit, Unit, O
                     it.printStackTrace()
                     throwable.printStackTrace()
                 }
+                null
             }
         } else {
-            @Suppress("UNCHECKED_CAST")
-            emit(message as KafkaMessage<Key, Partition, Value?, Output>)
+            message as KafkaMessage<Key, Partition, Value?, Output>
         }
     }
+}
+
+public fun <Key, Partition, Value, Output> Flow<KafkaMessage<Key, Partition, Value?, Output>>.ignoreTombstones(): Flow<KafkaMessage<Key, Partition, Value, Output>> {
+    return filter { message ->
+        if (message is Record) {
+            message.value != null
+        } else {
+            true
+        }
+    } as Flow<KafkaMessage<Key, Partition, Value, Output>>
 }
