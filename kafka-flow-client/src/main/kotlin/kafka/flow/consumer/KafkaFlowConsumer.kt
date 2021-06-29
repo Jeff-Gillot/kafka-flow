@@ -1,5 +1,6 @@
 package kafka.flow.consumer
 
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
@@ -12,6 +13,11 @@ public interface KafkaFlowConsumer<FlowType> : Closeable {
     public fun isRunning(): Boolean
     public suspend fun isUpToDate(): Boolean
     public suspend fun lag(): Long
+
+    public suspend fun waitUntilUpToDate() {
+        while (isRunning() && !isUpToDate()) delay(10)
+        if (!isRunning()) throw IllegalStateException("Consumer is not running")
+    }
 }
 
 public interface KafkaFlowConsumerWithoutGroupId<FlowType> : KafkaFlowConsumer<FlowType>, Closeable
