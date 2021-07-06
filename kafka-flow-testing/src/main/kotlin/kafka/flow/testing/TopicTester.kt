@@ -4,8 +4,8 @@ import be.delta.flow.time.minutes
 import be.delta.flow.time.seconds
 import kafka.flow.TopicDescriptor
 import kafka.flow.consumer.StartOffsetPolicy
-import kafka.flow.consumer.without.group.id.ignoreTombstones
-import kafka.flow.consumer.without.group.id.values
+import kafka.flow.consumer.ignoreTombstones
+import kafka.flow.consumer.values
 import kafka.flow.server.KafkaServer
 import kotlinx.coroutines.flow.*
 import java.time.Duration

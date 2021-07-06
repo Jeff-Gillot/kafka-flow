@@ -4,8 +4,8 @@ import kafka.flow.TopicDescriptor
 import kafka.flow.consumer.*
 import kafka.flow.consumer.KafkaFlowConsumerWithGroupId
 import kafka.flow.consumer.with.group.id.KafkaFlowConsumerWithGroupIdImpl
-import kafka.flow.consumer.with.group.id.createTransactions
-import kafka.flow.consumer.without.group.id.deserializeUsing
+import kafka.flow.consumer.with.group.id.WithTransaction
+import kafka.flow.consumer.deserializeUsing
 import kotlinx.coroutines.flow.Flow
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
@@ -19,11 +19,12 @@ public class KafkaFlowConsumerWithGroupIdAndTransactions<Key, PartitionKey, Valu
     autoStopPolicy: AutoStopPolicy,
     private val maxOpenTransactions: Int,
     private val commitInterval: Duration
-) : KafkaFlowConsumerWithGroupId<KafkaMessageWithTransaction<Key, PartitionKey, Value?, Unit>> {
+) : KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit, WithTransaction>> {
     private val delegate = KafkaFlowConsumerWithGroupIdImpl(clientProperties, listOf(topicDescriptor.name), startOffsetPolicy, autoStopPolicy)
 
-    override suspend fun startConsuming(onDeserializationException: suspend (Throwable) -> Unit): Flow<KafkaMessageWithTransaction<Key, PartitionKey, Value?, Unit>> {
-        return delegate.startConsuming()
+    override suspend fun startConsuming(onDeserializationException: suspend (Throwable) -> Unit): Flow<KafkaMessage<Key, PartitionKey, Value?, Unit, WithTransaction>> {
+        return delegate
+            .startConsuming()
             .deserializeUsing(topicDescriptor, onDeserializationException)
             .createTransactions(maxOpenTransactions, commitInterval)
     }

@@ -1,7 +1,8 @@
 package kafka.flow.producer
 
 import kafka.flow.TopicDescriptor
-import kafka.flow.consumer.with.group.id.Transaction
+import kafka.flow.consumer.with.group.id.MaybeTransaction
+import kafka.flow.consumer.with.group.id.WithTransaction
 import kotlinx.coroutines.runBlocking
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.ProducerRecord
@@ -29,7 +30,7 @@ public class KafkaFlowTopicProducer<Key, PartitionKey, Value>(private val topicD
         ) { _, exception -> exception?.printStackTrace() }
     }
 
-    public suspend fun send(value: Value, transaction: Transaction) {
+    public suspend fun send(value: Value, transaction: MaybeTransaction) {
         val key = topicDescriptor.key(value)
         val partitionKey = topicDescriptor.partitionKey(key)
         delegate.send(
@@ -48,7 +49,7 @@ public class KafkaFlowTopicProducer<Key, PartitionKey, Value>(private val topicD
         }
     }
 
-    public suspend fun sendTombstone(key: Key, timestamp: Instant, transaction: Transaction) {
+    public suspend fun sendTombstone(key: Key, timestamp: Instant, transaction: MaybeTransaction) {
         val partitionKey = topicDescriptor.partitionKey(key)
         delegate.send(
             ProducerRecord(

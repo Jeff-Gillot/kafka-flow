@@ -3,6 +3,8 @@ package kafka.flow.server.api
 import be.delta.flow.time.seconds
 import kafka.flow.TopicDescriptor
 import kafka.flow.consumer.*
+import kafka.flow.consumer.with.group.id.WithTransaction
+import kafka.flow.consumer.with.group.id.WithoutTransaction
 import kafka.flow.utils.allPartitions
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.TopicPartition
@@ -63,16 +65,16 @@ public class ConsumerBuilderStep2FromWithoutGroupId<Key, PartitionKey, Value> in
 }
 
 public class ConsumerBuilderStep3AutoStopWithGroupIdAndTransaction<Key, PartitionKey, Value> internal constructor(private val consumerBuilderConfig: ConsumerBuilderConfig<Key, PartitionKey, Value>) {
-    public fun consumeUntilStopped(): KafkaFlowConsumerWithGroupId<KafkaMessageWithTransaction<Key, PartitionKey, Value?, Unit>> =
+    public fun consumeUntilStopped(): KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit, WithTransaction>> =
         consumer(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.never()))
 
-    public fun consumeUntilUpToDate(): KafkaFlowConsumerWithGroupId<KafkaMessageWithTransaction<Key, PartitionKey, Value?, Unit>> =
+    public fun consumeUntilUpToDate(): KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit, WithTransaction>> =
         consumer(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.whenUpToDate()))
 
-    public fun consumerUntilSpecifiedTime(stopTime: Instant): KafkaFlowConsumerWithGroupId<KafkaMessageWithTransaction<Key, PartitionKey, Value?, Unit>> =
+    public fun consumerUntilSpecifiedTime(stopTime: Instant): KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit, WithTransaction>> =
         consumer(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.atSpecificTime(stopTime)))
 
-    public fun consumerUntilSpecifiedOffsetFromNow(duration: Duration): KafkaFlowConsumerWithGroupId<KafkaMessageWithTransaction<Key, PartitionKey, Value?, Unit>> =
+    public fun consumerUntilSpecifiedOffsetFromNow(duration: Duration): KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit, WithTransaction>> =
         consumer(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.specificOffsetFromNow(duration)))
 
     private fun consumer(builderConfig: ConsumerBuilderConfig<Key, PartitionKey, Value>): KafkaFlowConsumerWithGroupIdAndTransactions<Key, PartitionKey, Value> {
@@ -96,19 +98,19 @@ public class ConsumerBuilderStep3AutoStopWithGroupIdAndTransaction<Key, Partitio
 }
 
 public class ConsumerBuilderStep3AutoStopWithGroupIdAndWithoutTransaction<Key, PartitionKey, Value> internal constructor(private val consumerBuilderConfig: ConsumerBuilderConfig<Key, PartitionKey, Value>) {
-    public fun consumeUntilStopped(): KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit>> =
+    public fun consumeUntilStopped(): KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit, WithoutTransaction>> =
         consumer(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.never()))
 
-    public fun consumeUntilUpToDate(): KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit>> =
+    public fun consumeUntilUpToDate(): KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit, WithoutTransaction>> =
         consumer(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.whenUpToDate()))
 
-    public fun consumerUntilSpecifiedTime(stopTime: Instant): KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit>> =
+    public fun consumerUntilSpecifiedTime(stopTime: Instant): KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit, WithoutTransaction>> =
         consumer(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.atSpecificTime(stopTime)))
 
-    public fun consumerUntilSpecifiedOffsetFromNow(duration: Duration): KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit>> =
+    public fun consumerUntilSpecifiedOffsetFromNow(duration: Duration): KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit, WithoutTransaction>> =
         consumer(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.specificOffsetFromNow(duration)))
 
-    private fun consumer(builderConfig: ConsumerBuilderConfig<Key, PartitionKey, Value>): KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit>> {
+    private fun consumer(builderConfig: ConsumerBuilderConfig<Key, PartitionKey, Value>): KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit, WithoutTransaction>> {
         return KafkaFlowConsumerWithGroupIdAndWithoutTransactions(
             properties(),
             builderConfig.topicDescriptor,
@@ -141,7 +143,7 @@ public class ConsumerBuilderStep3AutoStopWithoutGroupId<Key, PartitionKey, Value
 }
 
 public class ConsumerBuilderStep4PartitionsWithoutGroupId<Key, PartitionKey, Value> internal constructor(private val consumerBuilderConfig: ConsumerBuilderConfig<Key, PartitionKey, Value>) {
-    public fun readSpecificPartitions(partitions: List<Int>): kafka.flow.consumer.KafkaFlowConsumerWithoutGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit>> {
+    public fun readSpecificPartitions(partitions: List<Int>): kafka.flow.consumer.KafkaFlowConsumerWithoutGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit, WithoutTransaction>> {
         partitions.firstOrNull { it < 0 || it >= consumerBuilderConfig.topicDescriptor.partitionNumber }?.let {
             throw IllegalArgumentException("Invalid partitions numbers it should be between 0 and ${consumerBuilderConfig.topicDescriptor.partitionNumber - 1} found $it")
         }
@@ -151,13 +153,13 @@ public class ConsumerBuilderStep4PartitionsWithoutGroupId<Key, PartitionKey, Val
         return consumer(consumerBuilderConfig, topicPartitions)
     }
 
-    public fun readAllPartitions(): kafka.flow.consumer.KafkaFlowConsumerWithoutGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit>> =
+    public fun readAllPartitions(): kafka.flow.consumer.KafkaFlowConsumerWithoutGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit, WithoutTransaction>> =
         consumer(consumerBuilderConfig, consumerBuilderConfig.topicDescriptor.allPartitions())
 
     private fun consumer(
         builderConfig: ConsumerBuilderConfig<Key, PartitionKey, Value>,
         partitions: List<TopicPartition>
-    ): kafka.flow.consumer.KafkaFlowConsumerWithoutGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit>> {
+    ): kafka.flow.consumer.KafkaFlowConsumerWithoutGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit, WithoutTransaction>> {
         return KafkaFlowConsumerWithoutGroupId(
             properties(),
             builderConfig.topicDescriptor,

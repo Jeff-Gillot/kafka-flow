@@ -3,6 +3,7 @@ package kafka.flow.consumer.without.group.id
 import be.delta.flow.time.milliseconds
 import be.delta.flow.time.seconds
 import kafka.flow.consumer.*
+import kafka.flow.consumer.with.group.id.WithoutTransaction
 import kafka.flow.utils.logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -22,7 +23,7 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
     private val assignment: List<TopicPartition>,
     private val startOffsetPolicy: StartOffsetPolicy,
     private val autoStopPolicy: AutoStopPolicy
-) : KafkaFlowConsumerWithoutGroupId<KafkaMessage<Unit, Unit, Unit, Unit>> {
+) : KafkaFlowConsumerWithoutGroupId<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>> {
     private val logger = logger()
     private val properties: Properties = Properties().apply { putAll(clientProperties) }
     private val delegate: KafkaConsumer<ByteArray, ByteArray> = KafkaConsumer(properties, ByteArrayDeserializer(), ByteArrayDeserializer())
@@ -37,7 +38,7 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
         require(clientProperties[ConsumerConfig.GROUP_ID_CONFIG] == null) { "${ConsumerConfig.GROUP_ID_CONFIG} must NOT be set" }
     }
 
-    override suspend fun startConsuming(onDeserializationException: suspend (Throwable) -> Unit): Flow<KafkaMessage<Unit, Unit, Unit, Unit>> {
+    override suspend fun startConsuming(onDeserializationException: suspend (Throwable) -> Unit): Flow<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>> {
         subscribe()
         return createConsumerChannel()
             .consumeAsFlow()
@@ -68,8 +69,8 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
         stop()
     }
 
-    private suspend fun createConsumerChannel(): Channel<KafkaMessage<Unit, Unit, Unit, Unit>> {
-        val channel = Channel<KafkaMessage<Unit, Unit, Unit, Unit>>()
+    private suspend fun createConsumerChannel(): Channel<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>> {
+        val channel = Channel<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>()
         CoroutineScope(currentCoroutineContext()).launch(Dispatchers.IO) {
             try {
                 channel.send(StartConsuming(this@KafkaFlowConsumerWithoutGroupIdImpl))
@@ -88,9 +89,9 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
         return channel
     }
 
-    private suspend fun fetchAndProcessRecords(channel: Channel<KafkaMessage<Unit, Unit, Unit, Unit>>) {
+    private suspend fun fetchAndProcessRecords(channel: Channel<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>) {
         val records = delegateMutex.withLock { delegate.poll(pollDuration) }
-        records.map { Record(it, Unit, Unit, Unit, Unit) }.forEach { channel.send(it) }
+        records.map { Record(it, Unit, Unit, Unit, Unit, WithoutTransaction) }.forEach { channel.send(it) }
         if (records.isEmpty) yield()
         if (!records.isEmpty) channel.send(EndOfBatch())
     }
@@ -148,7 +149,7 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
         }
     }
 
-    private suspend fun FlowCollector<KafkaMessage<Unit, Unit, Unit, Unit>>.cleanup() {
+    private suspend fun FlowCollector<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>.cleanup() {
         try {
             emit(StopConsuming())
         } finally {

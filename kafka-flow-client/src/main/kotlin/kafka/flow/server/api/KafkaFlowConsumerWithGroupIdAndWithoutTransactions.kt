@@ -4,7 +4,8 @@ import kafka.flow.TopicDescriptor
 import kafka.flow.consumer.*
 import kafka.flow.consumer.KafkaFlowConsumerWithGroupId
 import kafka.flow.consumer.with.group.id.KafkaFlowConsumerWithGroupIdImpl
-import kafka.flow.consumer.without.group.id.deserializeUsing
+import kafka.flow.consumer.deserializeUsing
+import kafka.flow.consumer.with.group.id.WithoutTransaction
 import kotlinx.coroutines.flow.Flow
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
@@ -15,10 +16,10 @@ public class KafkaFlowConsumerWithGroupIdAndWithoutTransactions<Key, PartitionKe
     private val topicDescriptor: TopicDescriptor<Key, PartitionKey, Value>,
     startOffsetPolicy: StartOffsetPolicy,
     autoStopPolicy: AutoStopPolicy,
-) : KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit>> {
+) : KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit, WithoutTransaction>> {
     private val delegate = KafkaFlowConsumerWithGroupIdImpl(clientProperties, listOf(topicDescriptor.name), startOffsetPolicy, autoStopPolicy)
 
-    override suspend fun startConsuming(onDeserializationException: suspend (Throwable) -> Unit): Flow<KafkaMessage<Key, PartitionKey, Value?, Unit>> {
+    override suspend fun startConsuming(onDeserializationException: suspend (Throwable) -> Unit): Flow<KafkaMessage<Key, PartitionKey, Value?, Unit, WithoutTransaction>> {
         return delegate
             .startConsuming()
             .deserializeUsing(topicDescriptor, onDeserializationException)

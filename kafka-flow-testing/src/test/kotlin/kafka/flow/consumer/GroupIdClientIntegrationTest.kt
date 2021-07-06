@@ -2,8 +2,6 @@ package kafka.flow.consumer
 
 import kafka.flow.TopicDescriptor
 import kafka.flow.consumer.with.group.id.KafkaFlowConsumerWithGroupIdImpl
-import kafka.flow.consumer.without.group.id.deserializeValue
-import kafka.flow.consumer.without.group.id.values
 import kafka.flow.producer.KafkaFlowTopicProducer
 import kafka.flow.server.KafkaServer
 import kafka.flow.testing.Await
@@ -11,7 +9,9 @@ import kafka.flow.testing.TestObject
 import kafka.flow.testing.TestTopicDescriptor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.count
+import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.apache.kafka.clients.admin.AdminClient
@@ -131,9 +131,12 @@ class GroupIdClientIntegrationTest {
             var assignment2: List<TopicPartition> = emptyList()
 
             launch {
-                consumer1.startConsuming().filterIsInstance<PartitionChangedMessage<Unit, Unit, Unit, Unit>>()
-                    .onEach { println("assignment1 ${it.newAssignment}") }
-                    .collect { assignment1 = it.newAssignment }
+                consumer1.startConsuming()
+                    .onPartitionChanged {
+                        println("assignment1 $it")
+                        assignment1 = it
+                    }
+                    .collect()
             }
 
             Await().untilAsserted {
@@ -144,9 +147,12 @@ class GroupIdClientIntegrationTest {
             }
 
             launch {
-                consumer2.startConsuming().filterIsInstance<PartitionChangedMessage<Unit, Unit, Unit, Unit>>()
-                    .onEach { println("assignment2 ${it.newAssignment}") }
-                    .collect { assignment2 = it.newAssignment }
+                consumer2.startConsuming()
+                    .onPartitionChanged {
+                        println("assignment2 $it")
+                        assignment2 = it
+                    }
+                    .collect()
             }
 
             Await().untilAsserted {

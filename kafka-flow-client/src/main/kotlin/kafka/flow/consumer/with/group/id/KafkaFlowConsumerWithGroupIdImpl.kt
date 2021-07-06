@@ -27,7 +27,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
     private val topics: List<String>,
     private val startOffsetPolicy: StartOffsetPolicy,
     private val autoStopPolicy: AutoStopPolicy
-) : KafkaFlowConsumerWithGroupId<KafkaMessage<Unit, Unit, Unit, Unit>> {
+) : KafkaFlowConsumerWithGroupId<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>> {
     private val properties = properties(clientProperties)
     private val logger = LoggerFactory.getLogger(TransactionManager::class.java)
     private val delegate: KafkaConsumer<ByteArray, ByteArray> = KafkaConsumer(properties, ByteArrayDeserializer(), ByteArrayDeserializer())
@@ -36,7 +36,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
     private var startInstant: Instant? = null
     private var endOffsets: Map<TopicPartition, Long> = emptyMap()
     private var assignment: List<TopicPartition> = emptyList()
-    private val partitionChangedMessages = mutableListOf<PartitionChangedMessage<Unit, Unit, Unit, Unit>>()
+    private val partitionChangedMessages = mutableListOf<PartitionChangedMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>()
     private val delegateMutex = Mutex()
     private val pollDuration = 10.milliseconds()
 
@@ -44,7 +44,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
         requireNotNull(clientProperties[ConsumerConfig.GROUP_ID_CONFIG]) { "${ConsumerConfig.GROUP_ID_CONFIG} must be set" }
     }
 
-    override suspend fun startConsuming(onDeserializationException: suspend (Throwable) -> Unit): Flow<KafkaMessage<Unit, Unit, Unit, Unit>> {
+    override suspend fun startConsuming(onDeserializationException: suspend (Throwable) -> Unit): Flow<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>> {
         subscribe()
         return createConsumerChannel()
             .consumeAsFlow()
@@ -77,7 +77,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
 
     override suspend fun commit(commitOffsets: Map<TopicPartition, OffsetAndMetadata>) {
         delegateMutex.withLock {
-            check(isRunning()) { "Lag cannot be computing when the consumer isn't running" }
+            check(isRunning()) { "Cannot commit transaction when the consumer isn't running" }
             delegate.commitAsync(commitOffsets) { offsets, exception ->
                 if (exception != null) {
                     logger.warn("Error while committing offsets ($offsets)", exception)
@@ -88,7 +88,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
 
     override suspend fun rollback(topicPartitionToRollback: Set<TopicPartition>) {
         delegateMutex.withLock {
-            check(isRunning()) { "Lag cannot be computing when the consumer isn't running" }
+            check(isRunning()) { "Cannot rollback transaction when the consumer isn't running" }
             val committedOffsets = delegate.committed(topicPartitionToRollback)
             topicPartitionToRollback.forEach { topicPartition ->
                 delegate.seek(topicPartition, committedOffsets[topicPartition]?.offset() ?: 0)
@@ -96,8 +96,8 @@ public class KafkaFlowConsumerWithGroupIdImpl(
         }
     }
 
-    private suspend fun createConsumerChannel(): Channel<KafkaMessage<Unit, Unit, Unit, Unit>> {
-        val channel = Channel<KafkaMessage<Unit, Unit, Unit, Unit>>()
+    private suspend fun createConsumerChannel(): Channel<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>> {
+        val channel = Channel<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>()
         CoroutineScope(currentCoroutineContext()).launch(Dispatchers.IO) {
             try {
                 channel.send(StartConsuming(this@KafkaFlowConsumerWithGroupIdImpl))
@@ -115,11 +115,11 @@ public class KafkaFlowConsumerWithGroupIdImpl(
         return channel
     }
 
-    private suspend fun fetchAndProcessRecords(channel: Channel<KafkaMessage<Unit, Unit, Unit, Unit>>) {
+    private suspend fun fetchAndProcessRecords(channel: Channel<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>) {
         val records = delegateMutex.withLock { delegate.poll(pollDuration) }
         partitionChangedMessages.forEach { channel.send(it) }
         partitionChangedMessages.clear()
-        records.map { Record(it, Unit, Unit, Unit, Unit) }.forEach { channel.send(it) }
+        records.map { Record(it, Unit, Unit, Unit, Unit, WithoutTransaction) }.forEach { channel.send(it) }
         if (records.isEmpty) yield()
         if (!records.isEmpty) channel.send(EndOfBatch())
     }
@@ -191,7 +191,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
         }
     }
 
-    private suspend fun FlowCollector<KafkaMessage<Unit, Unit, Unit, Unit>>.cleanup() {
+    private suspend fun FlowCollector<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>.cleanup() {
         try {
             emit(StopConsuming())
         } finally {

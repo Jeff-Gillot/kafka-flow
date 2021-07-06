@@ -1,8 +1,5 @@
 package kafka.flow.consumer
 
-import kafka.flow.consumer.with.group.id.ignoreTombstones
-import kafka.flow.consumer.with.group.id.mapValueToOutput
-import kafka.flow.consumer.with.group.id.writeOutputToKafkaAndCommit
 import kafka.flow.producer.KafkaOutput
 import kafka.flow.testing.TestObject
 import kafka.flow.testing.TestServer

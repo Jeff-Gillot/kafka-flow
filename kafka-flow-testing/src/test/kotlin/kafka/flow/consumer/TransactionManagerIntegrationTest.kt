@@ -3,10 +3,6 @@ package kafka.flow.consumer
 import be.delta.flow.time.second
 import kafka.flow.TopicDescriptor
 import kafka.flow.consumer.with.group.id.KafkaFlowConsumerWithGroupIdImpl
-import kafka.flow.consumer.with.group.id.createTransactions
-import kafka.flow.consumer.with.group.id.onEachRecord
-import kafka.flow.consumer.with.group.id.values
-import kafka.flow.consumer.without.group.id.deserializeUsing
 import kafka.flow.producer.KafkaFlowTopicProducer
 import kafka.flow.server.KafkaServer
 import kafka.flow.testing.Await
@@ -14,6 +10,7 @@ import kafka.flow.testing.TestObject
 import kafka.flow.testing.TestTopicDescriptor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -75,7 +72,7 @@ class TransactionManagerIntegrationTest {
 
         launch {
             consumer!!.startConsuming()
-                .createTransactions(10, 1.second()).onEachRecord { it.transaction.unlock() }.values().take(10).collect()
+                .createTransactions(10, 1.second()).onEachRecord { it.transaction.unlock() }.filterIsInstance<Record<*, *, *, *, *>>().take(10).collect()
         }
 
         repeat(20) { producer.send(TestObject.random()) }
