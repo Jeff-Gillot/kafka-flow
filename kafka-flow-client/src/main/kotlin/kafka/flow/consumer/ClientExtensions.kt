@@ -188,3 +188,12 @@ public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransactio
 ): Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>> {
     return mapRecord { record -> Record(record.consumerRecord, record.key, record.partitionKey, record.value, block.invoke(record.value), record.transaction) }
 }
+
+public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>>.groupByPartitionKey(
+    topicDescriptor: TopicDescriptor<Key, Partition, Value>,
+    processorTimeout: Duration,
+    channelCapacity: Int = 10,
+    flowFactory: suspend (Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>>, partitionKey: Partition) -> Unit
+) {
+    return collect(GroupingProcessor(topicDescriptor, processorTimeout, channelCapacity, flowFactory))
+}
