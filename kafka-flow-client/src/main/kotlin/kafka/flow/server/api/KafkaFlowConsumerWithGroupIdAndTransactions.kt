@@ -26,7 +26,7 @@ public class KafkaFlowConsumerWithGroupIdAndTransactions<Key, PartitionKey, Valu
         return delegate
             .startConsuming()
             .deserializeUsing(topicDescriptor, onDeserializationException)
-            .createTransactions(maxOpenTransactions, commitInterval)
+            .createTransactions(maxOpenTransactions)
     }
 
     override fun stop(): Unit = delegate.stop()

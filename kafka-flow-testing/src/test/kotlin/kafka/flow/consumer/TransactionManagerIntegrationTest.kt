@@ -9,6 +9,7 @@ import kafka.flow.testing.Await
 import kafka.flow.testing.TestObject
 import kafka.flow.testing.TestTopicDescriptor
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.take
@@ -56,7 +57,9 @@ class TransactionManagerIntegrationTest {
 
         launch {
             consumer!!.startConsuming()
-                .createTransactions(10, 1.second()).onEachRecord { it.transaction.unlock() }.collect()
+                .createTransactions(10)
+                .onEachRecord { it.transaction.unlock() }
+                .collect()
         }
 
         repeat(10) { producer.send(TestObject.random()) }
@@ -67,12 +70,58 @@ class TransactionManagerIntegrationTest {
     }
 
     @Test
+    fun committingTransactionWithDelay_changesCommittedOffsets(): Unit = runTest {
+        consumer = KafkaFlowConsumerWithGroupIdImpl(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
+
+        launch {
+            consumer!!
+                .startConsuming()
+                .createTransactions(10, 1.second())
+                .onEachRecord {
+                    launch {
+                        delay(100)
+                        it.transaction.unlock()
+                    }
+                }
+                .collect()
+        }
+
+        repeat(10) { producer.send(TestObject.random()) }
+
+        Await().untilAsserted {
+            validateCommittedOffset(10)
+        }
+    }
+
+    @Test
+    fun notCommitting_stopsProcessing(): Unit = runTest {
+        consumer = KafkaFlowConsumerWithGroupIdImpl(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
+
+        var count = 0
+
+        launch {
+            consumer!!
+                .startConsuming()
+                .createTransactions(10, 1.second())
+                .onEachRecord { count++ }
+                .collect()
+        }
+
+        repeat(10) { producer.send(TestObject.random()) }
+        delay(1000)
+
+        Await().untilAsserted {
+            expectThat(count).isEqualTo(10)
+        }
+    }
+
+    @Test
     fun committingTransactionOnStopConsumer_changesCommittedOffsets(): Unit = runTest {
         consumer = KafkaFlowConsumerWithGroupIdImpl(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
 
         launch {
             consumer!!.startConsuming()
-                .createTransactions(10, 1.second()).onEachRecord { it.transaction.unlock() }.filterIsInstance<Record<*, *, *, *, *>>().take(10).collect()
+                .createTransactions(10).onEachRecord { it.transaction.unlock() }.filterIsInstance<Record<*, *, *, *, *>>().take(10).collect()
         }
 
         repeat(20) { producer.send(TestObject.random()) }
@@ -95,7 +144,7 @@ class TransactionManagerIntegrationTest {
         launch {
             consumer!!.startConsuming()
                 .deserializeUsing(topic)
-                .createTransactions(10, 1.second()).onEachRecord {
+                .createTransactions(10).onEachRecord {
                     if (failedRecord == null) {
                         failedRecord = it.value
                         it.transaction.rollback()
