@@ -17,18 +17,19 @@ import org.testcontainers.shaded.org.apache.commons.lang.RandomStringUtils
 internal class GroupingProcessorTest : KafkaServerIntegrationTest() {
     @Test
     fun testGrouping() = runTest {
-        val testTopic = TestTopicDescriptor.next()
-        TestServer.admin().createTopics(testTopic)
+        val testTopic1 = TestTopicDescriptor.next()
+        val testTopic2 = TestTopicDescriptor.next()
+        TestServer.admin().createTopics(testTopic1, testTopic2)
 
         launch {
-            TestServer.from(testTopic)
+            TestServer.from(testTopic1, testTopic2)
                 .consumer()
                 .withGroupId(RandomStringUtils.random(5))
                 .autoOffsetResetEarliest()
                 .consumeUntilStopped()
                 .startConsuming()
                 .ignoreTombstones()
-                .groupByPartitionKey(testTopic, 60.seconds(), 10) { flow, partitionKey ->
+                .groupByPartitionKey(60.seconds(), 10) { flow, partitionKey ->
                     println("New processor $partitionKey")
                     flow
                         .onEachRecord { delay(1000) }
@@ -39,15 +40,15 @@ internal class GroupingProcessorTest : KafkaServerIntegrationTest() {
                 }
         }
 
-        TestServer.on(testTopic).send(TestObject.random().copy(key = TestObject.Key("1", "A")))
-        TestServer.on(testTopic).send(TestObject.random().copy(key = TestObject.Key("2", "A")))
-        TestServer.on(testTopic).send(TestObject.random().copy(key = TestObject.Key("3", "A")))
-        TestServer.on(testTopic).send(TestObject.random().copy(key = TestObject.Key("1", "B")))
-        TestServer.on(testTopic).send(TestObject.random().copy(key = TestObject.Key("2", "B")))
-        TestServer.on(testTopic).send(TestObject.random().copy(key = TestObject.Key("4", "A")))
+        TestServer.on(testTopic1).send(TestObject.random().copy(key = TestObject.Key("1", "A")))
+        TestServer.on(testTopic1).send(TestObject.random().copy(key = TestObject.Key("2", "A")))
+        TestServer.on(testTopic1).send(TestObject.random().copy(key = TestObject.Key("3", "A")))
+        TestServer.on(testTopic1).send(TestObject.random().copy(key = TestObject.Key("1", "B")))
+        TestServer.on(testTopic2).send(TestObject.random().copy(key = TestObject.Key("2", "B")))
+        TestServer.on(testTopic2).send(TestObject.random().copy(key = TestObject.Key("4", "A")))
 
         delay(15000)
-        TestServer.on(testTopic).send(TestObject.random().copy(key = TestObject.Key("5", "A")))
+        TestServer.on(testTopic1).send(TestObject.random().copy(key = TestObject.Key("5", "A")))
 
 
         delay(30000)

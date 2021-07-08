@@ -14,19 +14,19 @@ import java.util.*
 
 public class KafkaFlowConsumerWithGroupIdAndTransactions<Key, PartitionKey, Value>(
     clientProperties: Properties,
-    private val topicDescriptor: TopicDescriptor<Key, PartitionKey, Value>,
+    private val topicDescriptors: List<TopicDescriptor<Key, PartitionKey, Value>>,
     startOffsetPolicy: StartOffsetPolicy,
     autoStopPolicy: AutoStopPolicy,
     private val maxOpenTransactions: Int,
     private val commitInterval: Duration
 ) : KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit, WithTransaction>> {
-    private val delegate = KafkaFlowConsumerWithGroupIdImpl(clientProperties, listOf(topicDescriptor.name), startOffsetPolicy, autoStopPolicy)
+    private val delegate = KafkaFlowConsumerWithGroupIdImpl(clientProperties, topicDescriptors.map { it.name }, startOffsetPolicy, autoStopPolicy)
 
     override suspend fun startConsuming(onDeserializationException: suspend (Throwable) -> Unit): Flow<KafkaMessage<Key, PartitionKey, Value?, Unit, WithTransaction>> {
         return delegate
             .startConsuming()
-            .deserializeUsing(topicDescriptor, onDeserializationException)
-            .createTransactions(maxOpenTransactions)
+            .deserializeUsing(topicDescriptors, onDeserializationException)
+            .createTransactions(maxOpenTransactions, commitInterval)
     }
 
     override fun stop(): Unit = delegate.stop()

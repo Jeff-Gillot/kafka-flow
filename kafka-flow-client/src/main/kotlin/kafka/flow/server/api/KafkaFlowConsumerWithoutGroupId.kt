@@ -13,16 +13,16 @@ import java.util.*
 
 public class KafkaFlowConsumerWithoutGroupId<Key, PartitionKey, Value>(
     clientProperties: Properties,
-    private val topicDescriptor: TopicDescriptor<Key, PartitionKey, Value>,
-    private val assignment: List<TopicPartition>,
+    private val topicDescriptors: List<TopicDescriptor<Key, PartitionKey, Value>>,
+    assignment: List<TopicPartition>,
     startOffsetPolicy: StartOffsetPolicy,
     autoStopPolicy: AutoStopPolicy,
 ) : KafkaFlowConsumerWithoutGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit, WithoutTransaction>> {
-    private val delegate = KafkaFlowConsumerWithoutGroupIdImpl(clientProperties, topicDescriptor.allPartitions(), startOffsetPolicy, autoStopPolicy)
+    private val delegate = KafkaFlowConsumerWithoutGroupIdImpl(clientProperties, assignment, startOffsetPolicy, autoStopPolicy)
 
     override suspend fun startConsuming(onDeserializationException: suspend (Throwable) -> Unit): Flow<KafkaMessage<Key, PartitionKey, Value?, Unit, WithoutTransaction>> {
         return delegate.startConsuming()
-            .deserializeUsing(topicDescriptor, onDeserializationException)
+            .deserializeUsing(topicDescriptors, onDeserializationException)
     }
 
     override fun stop(): Unit = delegate.stop()

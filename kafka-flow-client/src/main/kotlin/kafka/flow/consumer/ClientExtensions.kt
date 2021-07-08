@@ -128,7 +128,14 @@ public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransactio
     topicDescriptor: TopicDescriptor<Key, Partition, Value>,
     onDeserializationException: suspend (Throwable) -> Unit = { it.printStackTrace() }
 ): Flow<KafkaMessage<Key, Partition, Value?, Output, Transaction>> {
-    return transform(TopicDescriptorDeserializerProcessor(topicDescriptor, onDeserializationException))
+    return deserializeUsing(listOf(topicDescriptor), onDeserializationException)
+}
+
+public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<KafkaMessage<Unit, Unit, Unit, Output, Transaction>>.deserializeUsing(
+    topicDescriptors: List<TopicDescriptor<out Key, out Partition, out Value>>,
+    onDeserializationException: suspend (Throwable) -> Unit = { it.printStackTrace() }
+): Flow<KafkaMessage<Key, Partition, Value?, Output, Transaction>> {
+    return transform(TopicDescriptorDeserializerProcessor(topicDescriptors as List<TopicDescriptor<Key, Partition, Value>>, onDeserializationException))
 }
 
 public fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<KafkaMessage<Key, Partition, Value?, Output, Transaction>>.ignoreTombstones(): Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>> {
@@ -190,10 +197,9 @@ public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransactio
 }
 
 public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>>.groupByPartitionKey(
-    topicDescriptor: TopicDescriptor<Key, Partition, Value>,
     processorTimeout: Duration,
     channelCapacity: Int = 10,
     flowFactory: suspend (Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>>, partitionKey: Partition) -> Unit
 ) {
-    return collect(GroupingProcessor(topicDescriptor, processorTimeout, channelCapacity, flowFactory))
+    return collect(GroupingProcessor(processorTimeout, channelCapacity, flowFactory))
 }

@@ -2,9 +2,7 @@ package kafka.flow.server.api
 
 import kafka.flow.TopicDescriptor
 import kafka.flow.consumer.*
-import kafka.flow.consumer.KafkaFlowConsumerWithGroupId
 import kafka.flow.consumer.with.group.id.KafkaFlowConsumerWithGroupIdImpl
-import kafka.flow.consumer.deserializeUsing
 import kafka.flow.consumer.with.group.id.WithoutTransaction
 import kotlinx.coroutines.flow.Flow
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
@@ -13,16 +11,16 @@ import java.util.*
 
 public class KafkaFlowConsumerWithGroupIdAndWithoutTransactions<Key, PartitionKey, Value>(
     clientProperties: Properties,
-    private val topicDescriptor: TopicDescriptor<Key, PartitionKey, Value>,
+    private val topicDescriptors: List<TopicDescriptor<Key, PartitionKey, Value>>,
     startOffsetPolicy: StartOffsetPolicy,
     autoStopPolicy: AutoStopPolicy,
 ) : KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit, WithoutTransaction>> {
-    private val delegate = KafkaFlowConsumerWithGroupIdImpl(clientProperties, listOf(topicDescriptor.name), startOffsetPolicy, autoStopPolicy)
+    private val delegate = KafkaFlowConsumerWithGroupIdImpl(clientProperties, topicDescriptors.map { it.name }, startOffsetPolicy, autoStopPolicy)
 
     override suspend fun startConsuming(onDeserializationException: suspend (Throwable) -> Unit): Flow<KafkaMessage<Key, PartitionKey, Value?, Unit, WithoutTransaction>> {
         return delegate
             .startConsuming()
-            .deserializeUsing(topicDescriptor, onDeserializationException)
+            .deserializeUsing(topicDescriptors, onDeserializationException)
     }
 
     override fun stop(): Unit = delegate.stop()

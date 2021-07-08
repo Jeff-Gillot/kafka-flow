@@ -1,7 +1,6 @@
 package kafka.flow.consumer.processor
 
 import be.delta.flow.time.seconds
-import kafka.flow.TopicDescriptor
 import kafka.flow.consumer.*
 import kafka.flow.consumer.with.group.id.MaybeTransaction
 import kafka.flow.consumer.with.group.id.WithoutTransaction
@@ -17,7 +16,6 @@ import java.time.Duration
 import java.time.Instant
 
 public class GroupingProcessor<Key, PartitionKey, Value, Output, Transaction : MaybeTransaction>(
-    private val topicDescriptor: TopicDescriptor<Key, PartitionKey, Value>,
     private val processorTimeout: Duration,
     private val channelCapacity: Int,
     private val flowFactory: suspend (Flow<KafkaMessage<Key, PartitionKey, Value, Output, Transaction>>, partitionKey: PartitionKey) -> Unit
@@ -25,6 +23,7 @@ public class GroupingProcessor<Key, PartitionKey, Value, Output, Transaction : M
     private lateinit var processorTimeoutLoop: Job
     private lateinit var client: KafkaFlowConsumer<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>
     private val processors = mutableMapOf<PartitionKey, Channel<KafkaMessage<Key, PartitionKey, Value, Output, Transaction>>>()
+    private val processorsPartitions = mutableMapOf<PartitionKey, TopicPartition>()
     private val processorLastMessage = mutableMapOf<PartitionKey, Instant>()
     private val mutex = Mutex()
 
@@ -36,7 +35,7 @@ public class GroupingProcessor<Key, PartitionKey, Value, Output, Transaction : M
         output: Output,
         transaction: Transaction
     ) {
-        val channel = getOrCreateProcessor(partitionKey)
+        val channel = getOrCreateProcessor(partitionKey, consumerRecord)
         channel.send(Record(consumerRecord, key, partitionKey, value, output, transaction))
     }
 
@@ -52,6 +51,7 @@ public class GroupingProcessor<Key, PartitionKey, Value, Output, Transaction : M
                     .toList()
                     .forEach {
                         processorLastMessage.remove(it)
+                        processorsPartitions.remove(it)
                         val channel = mutex.withLock { processors.remove(it) }
                         channel?.send(StopConsuming())
                         channel?.close()
@@ -82,26 +82,33 @@ public class GroupingProcessor<Key, PartitionKey, Value, Output, Transaction : M
     }
 
     override suspend fun partitionRevoked(revokedPartition: List<TopicPartition>, assignment: List<TopicPartition>) {
-        val revokedPartitionNumbers = revokedPartition.map { it.partition() }
         mutex.withLock {
-            val processorsToRevoke = processors.filterKeys { revokedPartitionNumbers.contains(topicDescriptor.partition(it)) }.toMap()
+            val processorsToRevoke = processorsPartitions
+                .filterValues { revokedPartition.contains(it) }
+                .keys
+                .associateWith { processors[it] }
             processorsToRevoke.values.forEach { processor ->
-                CoroutineScope(currentCoroutineContext()).launch {
-                    processor.send(StopConsuming())
-                    processor.close()
+                if (processor != null) {
+                    CoroutineScope(currentCoroutineContext()).launch {
+                        processor.send(StopConsuming())
+                        processor.close()
+                    }
                 }
             }
             processorsToRevoke.keys.forEach { processors.remove(it) }
+            processorsToRevoke.keys.forEach { processorsPartitions.remove(it) }
+            processorsToRevoke.keys.forEach { processorLastMessage.remove(it) }
         }
     }
 
-    private suspend fun getOrCreateProcessor(partitionKey: PartitionKey): Channel<KafkaMessage<Key, PartitionKey, Value, Output, Transaction>> {
+    private suspend fun getOrCreateProcessor(partitionKey: PartitionKey, consumerRecord: ConsumerRecord<ByteArray, ByteArray>): Channel<KafkaMessage<Key, PartitionKey, Value, Output, Transaction>> {
         return mutex.withLock {
             processorLastMessage[partitionKey] = Instant.now()
             var channel = processors[partitionKey]
             if (channel != null) return channel
             channel = Channel(channelCapacity)
             processors[partitionKey] = channel
+            processorsPartitions[partitionKey] = TopicPartition(consumerRecord.topic(), consumerRecord.partition())
             val flow = channel.consumeAsFlow()
             CoroutineScope(currentCoroutineContext()).launch {
                 flowFactory.invoke(flow, partitionKey)

@@ -80,7 +80,7 @@ public class ConsumerBuilderStep3AutoStopWithGroupIdAndTransaction<Key, Partitio
     private fun consumer(builderConfig: ConsumerBuilderConfig<Key, PartitionKey, Value>): KafkaFlowConsumerWithGroupIdAndTransactions<Key, PartitionKey, Value> {
         return KafkaFlowConsumerWithGroupIdAndTransactions(
             properties(),
-            builderConfig.topicDescriptor,
+            builderConfig.topicDescriptors,
             builderConfig.startOffsetPolicy!!,
             builderConfig.autoStopPolicy!!,
             builderConfig.maxOpenTransactions!!,
@@ -113,7 +113,7 @@ public class ConsumerBuilderStep3AutoStopWithGroupIdAndWithoutTransaction<Key, P
     private fun consumer(builderConfig: ConsumerBuilderConfig<Key, PartitionKey, Value>): KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit, WithoutTransaction>> {
         return KafkaFlowConsumerWithGroupIdAndWithoutTransactions(
             properties(),
-            builderConfig.topicDescriptor,
+            builderConfig.topicDescriptors,
             builderConfig.startOffsetPolicy!!,
             builderConfig.autoStopPolicy!!,
         )
@@ -143,18 +143,20 @@ public class ConsumerBuilderStep3AutoStopWithoutGroupId<Key, PartitionKey, Value
 }
 
 public class ConsumerBuilderStep4PartitionsWithoutGroupId<Key, PartitionKey, Value> internal constructor(private val consumerBuilderConfig: ConsumerBuilderConfig<Key, PartitionKey, Value>) {
-    public fun readSpecificPartitions(partitions: List<Int>): kafka.flow.consumer.KafkaFlowConsumerWithoutGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit, WithoutTransaction>> {
-        partitions.firstOrNull { it < 0 || it >= consumerBuilderConfig.topicDescriptor.partitionNumber }?.let {
-            throw IllegalArgumentException("Invalid partitions numbers it should be between 0 and ${consumerBuilderConfig.topicDescriptor.partitionNumber - 1} found $it")
+    public fun readSpecificPartitions(partitions: List<TopicPartition>): kafka.flow.consumer.KafkaFlowConsumerWithoutGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit, WithoutTransaction>> {
+        val topics = consumerBuilderConfig.topicDescriptors.associateBy { it.name }
+        partitions.firstOrNull { !topics.containsKey(it.topic()) }?.let {
+            throw IllegalArgumentException("Invalid topic partition you are trying to subscribe to a topic that's not in the list of topics '$it', available topics ${topics.keys.joinToString()}")
+        }
+        partitions.firstOrNull { it.partition() < 0 || it.partition() >= topics[it.topic()]!!.partitionNumber }?.let {
+            throw IllegalArgumentException("Invalid partitions numbers it should be between 0 and ${topics[it.topic()]!!.partitionNumber - 1} found $it")
         }
 
-        val topicPartitions = partitions.toSet().map { TopicPartition(consumerBuilderConfig.topicDescriptor.name, it) }.toList()
-
-        return consumer(consumerBuilderConfig, topicPartitions)
+        return consumer(consumerBuilderConfig, partitions)
     }
 
     public fun readAllPartitions(): kafka.flow.consumer.KafkaFlowConsumerWithoutGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit, WithoutTransaction>> =
-        consumer(consumerBuilderConfig, consumerBuilderConfig.topicDescriptor.allPartitions())
+        consumer(consumerBuilderConfig, consumerBuilderConfig.topicDescriptors.flatMap { it.allPartitions() })
 
     private fun consumer(
         builderConfig: ConsumerBuilderConfig<Key, PartitionKey, Value>,
@@ -162,7 +164,7 @@ public class ConsumerBuilderStep4PartitionsWithoutGroupId<Key, PartitionKey, Val
     ): kafka.flow.consumer.KafkaFlowConsumerWithoutGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit, WithoutTransaction>> {
         return KafkaFlowConsumerWithoutGroupId(
             properties(),
-            builderConfig.topicDescriptor,
+            builderConfig.topicDescriptors,
             partitions,
             builderConfig.startOffsetPolicy!!,
             builderConfig.autoStopPolicy!!,
@@ -178,7 +180,7 @@ public class ConsumerBuilderStep4PartitionsWithoutGroupId<Key, PartitionKey, Val
 }
 
 public data class ConsumerBuilderConfig<Key, PartitionKey, Value>(
-    val topicDescriptor: TopicDescriptor<Key, PartitionKey, Value>,
+    val topicDescriptors: List<TopicDescriptor<Key, PartitionKey, Value>>,
     val serverProperties: Properties,
     val startOffsetPolicy: StartOffsetPolicy? = null,
     val autoStopPolicy: AutoStopPolicy? = null,
