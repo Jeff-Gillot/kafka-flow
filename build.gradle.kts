@@ -2,10 +2,8 @@ import java.net.URI
 
 plugins {
     kotlin("jvm") version "1.5.20"
+    `maven-publish`
 }
-
-group = "org.example"
-version = "0.1-SNAPSHOT"
 
 repositories {
     mavenCentral()
@@ -13,6 +11,7 @@ repositories {
 
 subprojects {
     apply(plugin = "kotlin")
+    apply(plugin = "maven-publish")
     repositories {
         mavenCentral()
         maven {
@@ -34,6 +33,18 @@ subprojects {
         implementation(kotlin("stdlib"))
 
         testImplementation(kotlin("test"))
+    }
+
+    publishing {
+        publications {
+            create<MavenPublication>("maven") {
+                groupId = "be.delta.flow"
+                artifactId = project.name
+                version = "1.0.0"
+
+                from(components["java"])
+            }
+        }
     }
 }
 
