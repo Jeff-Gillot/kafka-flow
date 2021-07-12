@@ -1,9 +1,9 @@
+import java.net.URI
+
 plugins {
     kotlin("jvm") version "1.5.20"
+    `maven-publish`
 }
-
-group = "org.example"
-version = "0.1-SNAPSHOT"
 
 repositories {
     mavenCentral()
@@ -11,8 +11,18 @@ repositories {
 
 subprojects {
     apply(plugin = "kotlin")
+    apply(plugin = "maven-publish")
     repositories {
         mavenCentral()
+        maven {
+            url = URI("https://jitpack.io")
+        }
+    }
+
+    java {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+        withSourcesJar()
     }
 
     kotlin {
@@ -23,6 +33,18 @@ subprojects {
         implementation(kotlin("stdlib"))
 
         testImplementation(kotlin("test"))
+    }
+
+    publishing {
+        publications {
+            create<MavenPublication>("maven") {
+                groupId = "be.delta.flow"
+                artifactId = project.name
+                version = "1.0.0"
+
+                from(components["java"])
+            }
+        }
     }
 }
 
@@ -38,6 +60,7 @@ project(":kafka-flow-client") {
         implementation(project(":kafka-flow-topic-descriptor"))
         implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.0")
         implementation("org.apache.kafka:kafka-clients:$kafkaVersion")
+        implementation( "com.github.Jeff-Gillot:time-extension:1.0.0")
         testImplementation("io.strikt:strikt-core:0.31.0")
     }
 }
@@ -52,6 +75,7 @@ project(":kafka-flow-testing") {
         implementation("org.slf4j:slf4j-simple:1.7.29")
         implementation("org.testcontainers:testcontainers:1.15.3")
         implementation("org.testcontainers:kafka:1.15.3")
+        implementation( "com.github.Jeff-Gillot:time-extension:1.0.0")
         testImplementation("io.strikt:strikt-core:0.31.0")
     }
 }

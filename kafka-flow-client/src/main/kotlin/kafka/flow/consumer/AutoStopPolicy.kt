@@ -8,7 +8,7 @@ public sealed interface AutoStopPolicy {
         public fun never(): Never = Never
         public fun whenUpToDate(): WhenUpToDate = WhenUpToDate
         public fun atSpecificTime(stopTime: Instant): AtSpecificTime = AtSpecificTime(stopTime)
-        public fun specificOffsetFromNow(duration: Duration): StartOffsetPolicy.SpecificOffsetFromNow = StartOffsetPolicy.SpecificOffsetFromNow(duration)
+        public fun specificOffsetFromNow(duration: Duration): SpecificOffsetFromNow = SpecificOffsetFromNow(duration)
     }
 
     public object Never : AutoStopPolicy

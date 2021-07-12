@@ -1,7 +1,7 @@
 package kafka.flow.testing
 
-import kafka.flow.utils.milliseconds
-import kafka.flow.utils.seconds
+import be.delta.flow.time.milliseconds
+import be.delta.flow.time.seconds
 import kotlinx.coroutines.delay
 import java.time.Duration
 import java.time.Instant

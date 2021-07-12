@@ -1,16 +1,12 @@
 package kafka.flow.consumer
 
 import kafka.flow.TopicDescriptor
-import kafka.flow.consumer.with.group.id.KafkaFlowConsumerWithGroupId
-import kafka.flow.server.Server
+import kafka.flow.consumer.with.group.id.KafkaFlowConsumerWithGroupIdImpl
 import kafka.flow.producer.KafkaFlowTopicProducer
-import kafka.flow.testing.Await
+import kafka.flow.server.KafkaServer
 import kafka.flow.testing.TestObject
 import kafka.flow.testing.TestTopicDescriptor
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.count
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.NewTopic
@@ -21,19 +17,18 @@ import org.junit.BeforeClass
 import org.junit.Test
 import org.testcontainers.containers.KafkaContainer
 import org.testcontainers.utility.DockerImageName
-import strikt.api.expectThat
-import strikt.assertions.isEqualTo
 import java.util.*
 
 
-class GroupIdClientTest {
+class KafkaToKafkaIntegrationTest {
     private lateinit var topic: TopicDescriptor<TestObject.Key, String, TestObject>
     private lateinit var producer: KafkaFlowTopicProducer<TestObject.Key, String, TestObject>
+    private var consumer: KafkaFlowConsumerWithGroupIdImpl? = null
 
     @Before
     fun createTestTopic() {
         topic = TestTopicDescriptor.next()
-        producer = server.on(topic)
+        producer = kafkaServer.on(topic)
         val admin = AdminClient.create(properties())
         admin.createTopics(listOf(NewTopic(topic.name, 12, 1))).all().get()
     }
@@ -44,54 +39,36 @@ class GroupIdClientTest {
     }
 
     @Test
-    fun subscribeFromBeginning_readAllMessages(): Unit = runBlocking {
-        val consumer = KafkaFlowConsumerWithGroupId(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
-        var count = 0
-        launch {
-            consumer
-                .startConsuming()
-                .deserializeValue { String(it) }
-                .values()
-                .collect { count++ }
-        }
-
-        repeat(10) { producer.send(TestObject.random()) }
-
-        Await().untilAsserted {
-            expectThat(count).describedAs("count").isEqualTo(10)
-        }
-
-        consumer.stop()
-    }
-
-
-    @Test
-    fun subscribeFromTheEnd_readNoMessages(): Unit = runBlocking {
-        repeat(10) { producer.send(TestObject.random()) }
-        delay(1000)
-
-        val consumer = KafkaFlowConsumerWithGroupId(properties(), listOf(topic.name), StartOffsetPolicy.latest(), AutoStopPolicy.whenUpToDate())
-        val count = consumer.startConsuming().values().count()
-
-        expectThat(count).describedAs("count").isEqualTo(0)
+    fun subscribeFromBeginning_readAllMessages(): Unit = runTest {
     }
 
     private fun properties(): Properties {
         val properties = Properties()
         properties[ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG] = kafka.bootstrapServers
         properties[ConsumerConfig.GROUP_ID_CONFIG] = "test-client"
+        properties[ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG] = "false"
         return properties
+    }
+
+    private fun runTest(block: suspend CoroutineScope.() -> Unit) {
+        runBlocking {
+            try {
+                block.invoke(this)
+            } finally {
+                consumer?.stop()
+            }
+        }
     }
 
     companion object {
         private val kafka: KafkaContainer = KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:6.2.0"))
-        private lateinit var server: Server
+        private lateinit var kafkaServer: KafkaServer
 
         @JvmStatic
         @BeforeClass
         fun setup() {
             kafka.start()
-            server = Server { bootstrapUrl = kafka.bootstrapServers }
+            kafkaServer = KafkaServer { bootstrapUrl = kafka.bootstrapServers }
         }
     }
 }
