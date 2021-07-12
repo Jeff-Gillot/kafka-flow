@@ -16,6 +16,7 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
     private var openedTransactionCount: Int = 0
     private val logger = LoggerFactory.getLogger(TransactionManager::class.java)
     private val openTransactions = HashMap<TopicPartition, SortedMap<Long, AtomicInteger>>()
+    private val highestTransactions = HashMap<TopicPartition, Long>()
     private var topicPartitionToRollback = mutableSetOf<TopicPartition>()
     private val mutex = Mutex()
 
@@ -37,6 +38,10 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
         waitTransactionSlotIfNeeded(topicPartition, offset)
         mutex.withLock {
             val transaction = transactionsOf(topicPartition).computeIfAbsent(offset) { AtomicInteger() }
+            val highestTransaction = highestTransactions.computeIfAbsent(topicPartition) { offset }
+            if (offset > highestTransaction) {
+                highestTransactions[topicPartition] = offset
+            }
             if (transaction.incrementAndGet() == 1) openedTransactionCount++
         }
     }
@@ -59,15 +64,7 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
         offsetsToCommit
     }
 
-    private suspend fun getPartitionsToRollback() = mutex.withLock {
-        val partitionsToRollback = topicPartitionToRollback
-        topicPartitionToRollback = mutableSetOf()
-        partitionsToRollback.forEach { topicPartition -> openTransactions.remove(topicPartition) }
-        openedTransactionCount = openTransactions.values.flatMap { it.values }.map { it.get() }.count { it >= 0 }
-        partitionsToRollback
-    }
-
-    private fun cleanFinishedTransactions() {
+    public fun cleanFinishedTransactions() {
         openTransactions.values.forEach { transactionMap ->
             transactionMap.filterValues { it.get() <= 0 }.forEach { transactionMap.remove(it.key) }
         }
@@ -76,13 +73,34 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
     private fun computeOffsetsToCommit(): Map<TopicPartition, OffsetAndMetadata> {
         return openTransactions
             .mapNotNull { (topicPartition, transactionMap) ->
-                transactionMap
+                var highestClosedTransaction: Long? = transactionMap
                     .entries
                     .takeWhile { it.value.get() <= 0 }
+                    .map { it.key }
                     .lastOrNull()
-                    ?.let { topicPartition to OffsetAndMetadata(it.key + 1) }
+
+                if (highestClosedTransaction == null && transactionMap.isEmpty())
+                    highestClosedTransaction = highestTransactions.remove(topicPartition)
+
+                highestClosedTransaction?.let { topicPartition to OffsetAndMetadata(it + 1) }
             }
             .toMap()
+    }
+
+
+    private suspend fun getPartitionsToRollback() = mutex.withLock {
+        if (topicPartitionToRollback.isNotEmpty()) {
+            val partitionsToRollback = topicPartitionToRollback
+            topicPartitionToRollback = mutableSetOf()
+            partitionsToRollback.forEach { topicPartition ->
+                highestTransactions.remove(topicPartition)
+                openTransactions.remove(topicPartition)
+            }
+            openedTransactionCount = openTransactions.values.flatMap { it.values }.map { it.get() }.count { it >= 0 }
+            partitionsToRollback
+        } else {
+            emptySet()
+        }
     }
 
     public suspend fun markRollback(topicPartition: TopicPartition): Unit = mutex.withLock {

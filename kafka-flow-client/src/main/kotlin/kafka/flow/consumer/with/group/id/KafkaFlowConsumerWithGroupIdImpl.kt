@@ -76,6 +76,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
     }
 
     override suspend fun commit(commitOffsets: Map<TopicPartition, OffsetAndMetadata>) {
+        if (commitOffsets.isEmpty()) return
         delegateMutex.withLock {
             check(isRunning()) { "Cannot commit transaction when the consumer isn't running" }
             delegate.commitAsync(commitOffsets) { offsets, exception ->
@@ -87,6 +88,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
     }
 
     override suspend fun rollback(topicPartitionToRollback: Set<TopicPartition>) {
+        if (topicPartitionToRollback.isEmpty()) return
         delegateMutex.withLock {
             check(isRunning()) { "Cannot rollback transaction when the consumer isn't running" }
             val committedOffsets = delegate.committed(topicPartitionToRollback)

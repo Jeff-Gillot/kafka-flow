@@ -179,7 +179,7 @@ public suspend fun <Key, Partition, Value, Output> Flow<KafkaMessage<Key, Partit
     maxOpenTransactions: Int = 1024,
     commitInterval: Duration = 30.seconds()
 ): Flow<KafkaMessage<Key, Partition, Value, Output, WithTransaction>> {
-    return this.transform(TransactionCreationProcessor(maxOpenTransactions, commitInterval))
+    return this.transform(TransactionProcessor(maxOpenTransactions, commitInterval))
 }
 
 public suspend fun <Key, Partition, Value> Flow<KafkaMessage<Key, Partition, Value, KafkaOutput, WithTransaction>>.writeOutputToKafkaAndCommit() {
