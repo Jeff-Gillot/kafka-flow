@@ -38,9 +38,9 @@ subprojects {
     publishing {
         publications {
             create<MavenPublication>("maven") {
-                groupId = "be.delta.flow"
+                groupId = "com.github.Jeff-Gillot.kafka-flow"
                 artifactId = project.name
-                version = "1.0.0"
+                version = "1.0.1-SNAPSHOT"
 
                 from(components["java"])
             }
