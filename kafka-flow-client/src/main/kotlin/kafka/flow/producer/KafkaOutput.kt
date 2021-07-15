@@ -4,7 +4,7 @@ import kafka.flow.TopicDescriptor
 import kafka.flow.server.KafkaServer
 import java.time.Instant
 
-public data class KafkaOutput(public val records: List<TopicDescriptorRecord<*, *, *>>) {
+public data class KafkaOutput(public val records: List<KafkaOutputRecord>) {
     public companion object {
         public fun <Key, PartitionKey, Value> forValue(kafkaServer: KafkaServer, topicDescriptor: TopicDescriptor<Key, PartitionKey, Value>, value: Value): KafkaOutput =
             KafkaOutput(listOf(TopicDescriptorRecord.Record(kafkaServer, topicDescriptor, value)))
@@ -18,6 +18,7 @@ public data class KafkaOutput(public val records: List<TopicDescriptorRecord<*, 
     }
 }
 
+public typealias KafkaOutputRecord = TopicDescriptorRecord<*, *, *>
 public sealed interface TopicDescriptorRecord<Key, PartitionKey, Value> {
     public val key: Key
     public val timestamp: Instant

@@ -1,13 +1,15 @@
 package kafka.flow.testing
 
+import be.delta.flow.time.minutes
 import kafka.flow.TopicDescriptor
+import org.apache.kafka.common.config.TopicConfig
 import java.time.Instant
 
 public class TestTopicDescriptor(override val name: String) : TopicDescriptor<TestObject.Key, String, TestObject> {
     override val partitionNumber: Int
         get() = 12
     override val config: Map<String, String>
-        get() = emptyMap()
+        get() = mapOf(TopicConfig.RETENTION_MS_CONFIG to 5.minutes().toMillis().toString())
 
     override fun serializeKey(key: TestObject.Key): ByteArray = "${key.partitionKey}/${key.id}".toByteArray()
     override fun deserializeKey(key: ByteArray): TestObject.Key {
