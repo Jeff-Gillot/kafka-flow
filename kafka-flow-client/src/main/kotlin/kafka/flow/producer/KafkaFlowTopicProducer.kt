@@ -2,7 +2,7 @@ package kafka.flow.producer
 
 import kafka.flow.TopicDescriptor
 import kafka.flow.consumer.with.group.id.MaybeTransaction
-import kafka.flow.consumer.with.group.id.WithTransaction
+import kafka.flow.consumer.with.group.id.WithoutTransaction
 import kotlinx.coroutines.runBlocking
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.ProducerRecord
@@ -16,21 +16,7 @@ public class KafkaFlowTopicProducer<Key, PartitionKey, Value>(private val topicD
         KafkaProducer(config, ByteArraySerializer(), ByteArraySerializer())
     }
 
-    public fun send(value: Value) {
-        val key = topicDescriptor.key(value)
-        val partitionKey = topicDescriptor.partitionKey(key)
-        delegate.send(
-            ProducerRecord(
-                topicDescriptor.name,
-                topicDescriptor.partition(partitionKey),
-                topicDescriptor.timestamp(value).toEpochMilli(),
-                topicDescriptor.serializeKey(key),
-                topicDescriptor.serializeValue(value)
-            )
-        ) { _, exception -> exception?.printStackTrace() }
-    }
-
-    public suspend fun send(value: Value, transaction: MaybeTransaction) {
+    public suspend fun send(value: Value, transaction: MaybeTransaction = WithoutTransaction) {
         val key = topicDescriptor.key(value)
         val partitionKey = topicDescriptor.partitionKey(key)
         delegate.send(
@@ -49,7 +35,7 @@ public class KafkaFlowTopicProducer<Key, PartitionKey, Value>(private val topicD
         }
     }
 
-    public suspend fun sendTombstone(key: Key, timestamp: Instant, transaction: MaybeTransaction) {
+    public suspend fun sendTombstone(key: Key, timestamp: Instant, transaction: MaybeTransaction = WithoutTransaction) {
         val partitionKey = topicDescriptor.partitionKey(key)
         delegate.send(
             ProducerRecord(
@@ -65,6 +51,10 @@ public class KafkaFlowTopicProducer<Key, PartitionKey, Value>(private val topicD
                 else transaction.unlock()
             }
         }
+    }
+
+    public suspend fun sendTombstone(value: Value, transaction: MaybeTransaction = WithoutTransaction) {
+        sendTombstone(topicDescriptor.key(value), topicDescriptor.timestamp(value), transaction)
     }
 
     public fun close() {
