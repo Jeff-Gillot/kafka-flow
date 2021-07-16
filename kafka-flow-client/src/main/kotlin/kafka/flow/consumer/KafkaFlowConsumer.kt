@@ -18,6 +18,11 @@ public interface KafkaFlowConsumer<FlowType> : Closeable {
         while (isRunning() && !isUpToDate()) delay(10)
         if (!isRunning()) throw IllegalStateException("Consumer is not running")
     }
+
+    public suspend fun stopAndWaitUntilStopped() {
+        stop()
+        while (isRunning()) delay(10)
+    }
 }
 
 public interface KafkaFlowConsumerWithoutGroupId<FlowType> : KafkaFlowConsumer<FlowType>, Closeable

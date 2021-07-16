@@ -14,8 +14,24 @@ import org.apache.kafka.common.TopicPartition
 import java.time.Duration
 
 public suspend fun <Key, Partition, Value, Output> Flow<KafkaMessage<Key, Partition, Value, Output, WithoutTransaction>>.collectValues(block: suspend (Value) -> Unit) {
-    this.filterIsInstance<Record<Key, Partition, Value, Output, WithoutTransaction>>()
-        .collect { block.invoke(it.value) }
+    this.collect {
+        if (it is Record) block.invoke(it.value)
+    }
+}
+
+public suspend fun <Key, Partition, Value, Output> Flow<KafkaMessage<Key, Partition, Value, Output, WithTransaction>>.collectValues(block: suspend (Value, WithTransaction) -> Unit) {
+    this.collect {
+        if (it is Record) block.invoke(it.value, it.transaction)
+    }
+}
+
+
+public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>>.collectRecords(
+    block: suspend (Record<Key, Partition, Value, Output, Transaction>) -> Unit
+) {
+    this.collect {
+        if (it is Record) block.invoke(it)
+    }
 }
 
 public suspend fun <KeyIn, PartitionIn, ValueIn, OutputIn, TransactionIn : MaybeTransaction, KeyOut, PartitionOut, ValueOut, OutputOut, TransactionOut : MaybeTransaction> Flow<KafkaMessage<KeyIn, PartitionIn, ValueIn, OutputIn, TransactionIn>>.mapRecord(
@@ -58,6 +74,12 @@ public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransactio
 public fun <Key, Partition, Value, Output> Flow<KafkaMessage<Key, Partition, Value, Output, WithoutTransaction>>.values(): Flow<Value> {
     return filterIsInstance<Record<Key, Partition, Value, Output, WithoutTransaction>>()
         .map { it.value }
+}
+
+@JvmName("valuesKeyPartitionValueOutputWithTransaction")
+public fun <Key, Partition, Value, Output> Flow<KafkaMessage<Key, Partition, Value, Output, WithTransaction>>.values(): Flow<Pair<Key, Value>> {
+    return filterIsInstance<Record<Key, Partition, Value, Output, WithTransaction>>()
+        .map { Pair(it.key, it.value) }
 }
 
 public fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>>.onEachRecord(
@@ -191,9 +213,9 @@ public suspend fun <Key, Partition, Value> Flow<KafkaMessage<Key, Partition, Val
 }
 
 public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<KafkaMessage<Key, Partition, Value, Unit, Transaction>>.mapValueToOutput(
-    block: suspend (Value) -> Output
+    block: suspend (Key, Value) -> Output
 ): Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>> {
-    return mapRecord { record -> Record(record.consumerRecord, record.key, record.partitionKey, record.value, block.invoke(record.value), record.transaction) }
+    return mapRecord { record -> Record(record.consumerRecord, record.key, record.partitionKey, record.value, block.invoke(record.key, record.value), record.transaction) }
 }
 
 public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>>.groupByPartitionKey(
@@ -202,4 +224,27 @@ public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransactio
     flowFactory: suspend (Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>>, partitionKey: Partition) -> Unit
 ) {
     return collect(GroupingProcessor(processorTimeout, channelCapacity, flowFactory))
+}
+
+public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>>.filterValue(
+    predicate: suspend (Value) -> Boolean
+): Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>> {
+    return filter { message ->
+        if (message is Record) {
+            val result = predicate.invoke(message.value)
+            if (!result) message.transaction.unlock()
+            result
+        } else {
+            true
+        }
+    }
+}
+
+public fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>>.onEachTombstone(
+    block: suspend (Record<Key, Partition, Value, Output, Transaction>) -> Unit
+): Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>> {
+    return onEach { message ->
+        if (message is Record && message.value == null)
+            block.invoke(message)
+    }
 }
