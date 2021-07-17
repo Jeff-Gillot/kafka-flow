@@ -4,19 +4,27 @@ import kafka.flow.TopicDescriptor
 import kafka.flow.server.KafkaServer
 import java.time.Instant
 
-public data class KafkaOutput(public val records: List<TopicDescriptorRecord<*, *, *>>) {
+public data class KafkaOutput(public val records: List<KafkaOutputRecord>) {
     public companion object {
         public fun <Key, PartitionKey, Value> forValue(kafkaServer: KafkaServer, topicDescriptor: TopicDescriptor<Key, PartitionKey, Value>, value: Value): KafkaOutput =
             KafkaOutput(listOf(TopicDescriptorRecord.Record(kafkaServer, topicDescriptor, value)))
 
         public fun <Key, PartitionKey, Value> forTombstone(kafkaServer: KafkaServer, topicDescriptor: TopicDescriptor<Key, PartitionKey, Value>, key: Key, timestamp: Instant): KafkaOutput =
             KafkaOutput(listOf(TopicDescriptorRecord.Tombstone(kafkaServer, topicDescriptor, key, timestamp)))
+
+        public fun empty(): KafkaOutput = emptyKafkaOutput
+
+        private val emptyKafkaOutput = KafkaOutput(emptyList())
     }
 
     public operator fun plus(other: KafkaOutput): KafkaOutput {
+        if (this.records.isEmpty()) return other
+        if (other.records.isEmpty()) return this
         return KafkaOutput(records + other.records)
     }
 }
+
+public typealias KafkaOutputRecord = TopicDescriptorRecord<*, *, *>
 
 public sealed interface TopicDescriptorRecord<Key, PartitionKey, Value> {
     public val key: Key

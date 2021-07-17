@@ -25,7 +25,7 @@ class TopicDescriptorIntegrationTest : KafkaServerIntegrationTest() {
                 .consumeUntilStopped()
                 .startConsuming()
                 .ignoreTombstones()
-                .mapValueToOutput { KafkaOutput.forValue(TestServer, testTopic2, it) }
+                .mapValueToOutput { _, value -> KafkaOutput.forValue(TestServer, testTopic2, value) }
                 .writeOutputToKafkaAndCommit()
         }
 

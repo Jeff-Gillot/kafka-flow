@@ -12,7 +12,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
 import java.time.Duration
 
-public class TransactionCreationProcessor<Key, PartitionKey, Value, Output>(
+public class TransactionProcessor<Key, PartitionKey, Value, Output>(
     maxOpenTransactions: Int, private val commitInterval: Duration
 ) : TransformProcessor<Key, PartitionKey, Value, Output, WithoutTransaction, Key, PartitionKey, Value, Output, WithTransaction> {
 
@@ -29,6 +29,7 @@ public class TransactionCreationProcessor<Key, PartitionKey, Value, Output>(
         transaction: WithoutTransaction
     ): Record<Key, PartitionKey, Value, Output, WithTransaction> {
         val newTransaction = WithTransaction(TopicPartition(consumerRecord.topic(), consumerRecord.partition()), consumerRecord.offset(), transactionManager)
+        newTransaction.lock()
         return Record(
             consumerRecord,
             key,
@@ -52,7 +53,7 @@ public class TransactionCreationProcessor<Key, PartitionKey, Value, Output>(
     }
 
     override suspend fun endOfBatch() {
-        client?.let { transactionManager.rollbackAndCommit(it) }
+        client?.let { transactionManager.cleanFinishedTransactions() }
     }
 
     override suspend fun completion() {

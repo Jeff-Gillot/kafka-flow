@@ -4,6 +4,7 @@ import kafka.flow.consumer.KafkaFlowConsumer
 import kafka.flow.consumer.KafkaMessage
 import kafka.flow.consumer.Record
 import kafka.flow.consumer.with.group.id.MaybeTransaction
+import kafka.flow.consumer.with.group.id.WithTransaction
 import kafka.flow.consumer.with.group.id.WithoutTransaction
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition

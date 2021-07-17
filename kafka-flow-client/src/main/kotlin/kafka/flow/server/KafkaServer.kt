@@ -12,6 +12,7 @@ public open class KafkaServer(private val config: Properties) {
     public constructor(bootstrapUrl: String) : this(ServerBuilder().apply { this.bootstrapUrl = bootstrapUrl }.build())
 
     private val producers = mutableMapOf<TopicDescriptor<*, *, *>, KafkaFlowTopicProducer<*, *, *>>()
+    private val admin by lazy { KafkaAdministration(config) }
 
     public fun <Key, PartitionKey, Value> on(topicDescriptor: TopicDescriptor<Key, PartitionKey, Value>): KafkaFlowTopicProducer<Key, PartitionKey, Value> {
         val producer = producers.computeIfAbsent(topicDescriptor) { KafkaFlowTopicProducer(topicDescriptor, config) }
@@ -27,7 +28,7 @@ public open class KafkaServer(private val config: Properties) {
     }
 
     public fun admin(): KafkaAdministration {
-        return KafkaAdministration(config)
+        return admin
     }
 
     public fun properties(): Properties = Properties().apply { putAll(config) }

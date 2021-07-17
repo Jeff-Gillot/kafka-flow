@@ -1,6 +1,7 @@
 package kafka.flow.consumer
 
 import be.delta.flow.time.second
+import be.delta.flow.time.seconds
 import kafka.flow.TopicDescriptor
 import kafka.flow.consumer.with.group.id.KafkaFlowConsumerWithGroupIdImpl
 import kafka.flow.producer.KafkaFlowTopicProducer
@@ -57,7 +58,7 @@ class TransactionManagerIntegrationTest {
 
         launch {
             consumer!!.startConsuming()
-                .createTransactions(10)
+                .createTransactions(10, 1.seconds())
                 .onEachRecord { it.transaction.unlock() }
                 .collect()
         }
@@ -144,7 +145,7 @@ class TransactionManagerIntegrationTest {
         launch {
             consumer!!.startConsuming()
                 .deserializeUsing(topic)
-                .createTransactions(10).onEachRecord {
+                .createTransactions(10, 1.second()).onEachRecord {
                     if (failedRecord == null) {
                         failedRecord = it.value
                         it.transaction.rollback()
