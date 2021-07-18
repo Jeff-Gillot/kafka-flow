@@ -8,6 +8,7 @@ import org.junit.Test
 import strikt.api.expectThat
 import strikt.api.expectThrows
 import strikt.assertions.isEqualTo
+import java.time.Instant
 
 internal class TopicTesterTest : KafkaServerIntegrationTest() {
     @Test
@@ -50,7 +51,7 @@ internal class TopicTesterTest : KafkaServerIntegrationTest() {
         TestServer.admin().createTopics(topic)
 
         val testObject = TestObject.random()
-        TestServer.on(topic).sendTombstone(testObject)
+        TestServer.on(topic).sendTombstone(testObject.key, Instant.now())
 
         TestServer.topicTester(topic).expectTombstone {
             condition("key == ${testObject.key}") { expectThat(it).isEqualTo(testObject.key) }

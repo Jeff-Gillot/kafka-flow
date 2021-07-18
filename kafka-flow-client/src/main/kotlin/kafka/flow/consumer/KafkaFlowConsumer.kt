@@ -1,13 +1,17 @@
 package kafka.flow.consumer
 
+import kafka.flow.consumer.processor.cache.Cache
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
 import java.io.Closeable
 
-public interface KafkaFlowConsumer<FlowType> : Closeable {
+public interface KafkaFlowConsumer<FlowType> : KafkaClient {
     public suspend fun startConsuming(onDeserializationException: suspend (Throwable) -> Unit = { it.printStackTrace() }): Flow<FlowType>
+}
+
+public interface KafkaClient : Closeable {
     public fun stop()
 
     public fun isRunning(): Boolean
@@ -26,7 +30,6 @@ public interface KafkaFlowConsumer<FlowType> : Closeable {
 }
 
 public interface KafkaFlowConsumerWithoutGroupId<FlowType> : KafkaFlowConsumer<FlowType>, Closeable
-
 
 public interface KafkaFlowConsumerWithGroupId<FlowType> : KafkaFlowConsumer<FlowType>, Closeable {
     public suspend fun commit(commitOffsets: Map<TopicPartition, OffsetAndMetadata>)

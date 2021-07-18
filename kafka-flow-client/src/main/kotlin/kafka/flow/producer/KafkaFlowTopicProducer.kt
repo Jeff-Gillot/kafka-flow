@@ -53,10 +53,6 @@ public class KafkaFlowTopicProducer<Key, PartitionKey, Value>(private val topicD
         }
     }
 
-    public suspend fun sendTombstone(value: Value, transaction: MaybeTransaction = WithoutTransaction) {
-        sendTombstone(topicDescriptor.key(value), topicDescriptor.timestamp(value), transaction)
-    }
-
     public fun close() {
         delegate.close()
     }

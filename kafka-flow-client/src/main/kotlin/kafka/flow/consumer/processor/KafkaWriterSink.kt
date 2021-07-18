@@ -4,6 +4,7 @@ import kafka.flow.consumer.with.group.id.MaybeTransaction
 import kafka.flow.producer.KafkaOutput
 import kafka.flow.producer.TopicDescriptorRecord
 import org.apache.kafka.clients.consumer.ConsumerRecord
+import java.time.Instant
 
 @Suppress("UNCHECKED_CAST")
 public class KafkaWriterSink<Key, PartitionKey, Value, Transaction : MaybeTransaction> : Sink<Key, PartitionKey, Value, KafkaOutput, Transaction> {
@@ -12,6 +13,7 @@ public class KafkaWriterSink<Key, PartitionKey, Value, Transaction : MaybeTransa
         key: Key,
         partitionKey: PartitionKey,
         value: Value,
+        timestamp: Instant,
         output: KafkaOutput,
         transaction: Transaction
     ) {

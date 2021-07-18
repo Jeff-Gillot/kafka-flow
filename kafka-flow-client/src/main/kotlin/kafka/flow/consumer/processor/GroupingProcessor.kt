@@ -32,11 +32,12 @@ public class GroupingProcessor<Key, PartitionKey, Value, Output, Transaction : M
         key: Key,
         partitionKey: PartitionKey,
         value: Value,
+        timestamp: Instant,
         output: Output,
         transaction: Transaction
     ) {
         val channel = getOrCreateProcessor(partitionKey, consumerRecord)
-        channel.send(Record(consumerRecord, key, partitionKey, value, output, transaction))
+        channel.send(Record(consumerRecord, key, partitionKey, value, timestamp, output, transaction))
     }
 
     override suspend fun startConsuming(client: KafkaFlowConsumer<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>) {

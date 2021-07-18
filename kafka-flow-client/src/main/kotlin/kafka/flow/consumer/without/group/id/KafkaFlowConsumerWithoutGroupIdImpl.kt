@@ -7,7 +7,10 @@ import kafka.flow.consumer.with.group.id.WithoutTransaction
 import kafka.flow.utils.logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.FlowCollector
+import kotlinx.coroutines.flow.consumeAsFlow
+import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.apache.kafka.clients.consumer.ConsumerConfig
@@ -91,7 +94,7 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
 
     private suspend fun fetchAndProcessRecords(channel: Channel<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>) {
         val records = delegateMutex.withLock { delegate.poll(pollDuration) }
-        records.map { Record(it, Unit, Unit, Unit, Unit, WithoutTransaction) }.forEach { channel.send(it) }
+        records.map { Record(it, Unit, Unit, Unit, Instant.ofEpochMilli(it.timestamp()), Unit, WithoutTransaction) }.forEach { channel.send(it) }
         if (records.isEmpty) yield()
         if (!records.isEmpty) channel.send(EndOfBatch())
     }

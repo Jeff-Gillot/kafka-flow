@@ -8,6 +8,7 @@ import kafka.flow.consumer.with.group.id.WithTransaction
 import kafka.flow.consumer.with.group.id.WithoutTransaction
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
+import java.time.Instant
 
 public interface Sink<Key, PartitionKey, Value, Output, Transaction : MaybeTransaction> {
     public suspend fun record(
@@ -15,6 +16,7 @@ public interface Sink<Key, PartitionKey, Value, Output, Transaction : MaybeTrans
         key: Key,
         partitionKey: PartitionKey,
         value: Value,
+        timestamp: Instant,
         output: Output,
         transaction: Transaction
     )

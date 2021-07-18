@@ -4,6 +4,7 @@ import kafka.flow.TopicDescriptor
 import kafka.flow.consumer.Record
 import kafka.flow.consumer.with.group.id.MaybeTransaction
 import org.apache.kafka.clients.consumer.ConsumerRecord
+import java.time.Instant
 
 public class TopicDescriptorDeserializerProcessor<Key, PartitionKey, Value, Output, Transaction : MaybeTransaction>(
     topicDescriptors: List<TopicDescriptor<Key, PartitionKey, Value>>,
@@ -17,6 +18,7 @@ public class TopicDescriptorDeserializerProcessor<Key, PartitionKey, Value, Outp
         key: Unit,
         partitionKey: Unit,
         value: Unit,
+        timestamp: Instant,
         output: Output,
         transaction: Transaction
     ): Record<Key, PartitionKey, Value?, Output, Transaction>? {
@@ -25,7 +27,8 @@ public class TopicDescriptorDeserializerProcessor<Key, PartitionKey, Value, Outp
             val newKey = topicDescriptor.deserializeKey(consumerRecord.key())
             val newPartitionKey = topicDescriptor.partitionKey(newKey)
             val newValue = topicDescriptor.deserializeValue(consumerRecord.value())
-            return Record(consumerRecord, newKey, newPartitionKey, newValue, output, transaction)
+            val newTimestamp = newValue?.let { topicDescriptor.timestamp(it) }?:timestamp
+            return Record(consumerRecord, newKey, newPartitionKey, newValue, newTimestamp, output, transaction)
         } catch (throwable: Throwable) {
             runCatching {
                 onDeserializationException.invoke(throwable)

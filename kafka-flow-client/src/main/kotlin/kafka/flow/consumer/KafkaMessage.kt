@@ -4,6 +4,7 @@ import kafka.flow.consumer.with.group.id.MaybeTransaction
 import kafka.flow.consumer.with.group.id.WithoutTransaction
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
+import java.time.Instant
 
 public sealed interface KafkaMessage<Key, PartitionKey, Value, Output, Transaction : MaybeTransaction>
 
@@ -12,6 +13,7 @@ public data class Record<Key, PartitionKey, Value, Output, Transaction : MaybeTr
     val key: Key,
     val partitionKey: PartitionKey,
     val value: Value,
+    val timestamp: Instant,
     val output: Output,
     val transaction: Transaction
 ) : KafkaMessage<Key, PartitionKey, Value, Output, Transaction>

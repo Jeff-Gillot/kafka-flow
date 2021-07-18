@@ -24,7 +24,7 @@ public class Await() {
         return this
     }
 
-    public suspend fun untilAsserted(block: () -> Unit) {
+    public suspend fun untilAsserted(block: suspend () -> Unit) {
         val timeoutTime = Instant.now() + timeout
         var lastError: Throwable? = safeInvoke(block)
         while (lastError != null && timeoutTime > Instant.now()) {
@@ -34,7 +34,7 @@ public class Await() {
         lastError?.let { throw it }
     }
 
-    private fun safeInvoke(block: () -> Unit): Throwable? = try {
+    private suspend fun safeInvoke(block: suspend () -> Unit): Throwable? = try {
         block.invoke()
         null
     } catch (error: Throwable) {

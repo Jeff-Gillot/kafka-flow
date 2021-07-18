@@ -2,6 +2,7 @@
 
 package kafka.flow.consumer
 
+import be.delta.flow.time.minute
 import be.delta.flow.time.seconds
 import kafka.flow.TopicDescriptor
 import kafka.flow.consumer.processor.*
@@ -9,7 +10,11 @@ import kafka.flow.consumer.with.group.id.MaybeTransaction
 import kafka.flow.consumer.with.group.id.WithTransaction
 import kafka.flow.consumer.with.group.id.WithoutTransaction
 import kafka.flow.producer.KafkaOutput
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 import org.apache.kafka.common.TopicPartition
 import java.time.Duration
 
@@ -65,6 +70,7 @@ public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransactio
             record.key,
             record.partitionKey,
             block.invoke(record.consumerRecord.value()),
+            record.timestamp,
             record.output,
             record.transaction
         )
@@ -180,7 +186,7 @@ public suspend fun <KeyIn, PartitionIn, ValueIn, OutputIn, TransactionIn : Maybe
         .onEndOfBatch(processor::endOfBatch)
         .onPartitionAssigned(processor::partitionAssigned)
         .onPartitionRevoked(processor::partitionRevoked)
-        .mapRecordNotNull { processor.record(it.consumerRecord, it.key, it.partitionKey, it.value, it.output, it.transaction) }
+        .mapRecordNotNull { processor.record(it.consumerRecord, it.key, it.partitionKey, it.value, it.timestamp, it.output, it.transaction) }
 }
 
 public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>>.collect(
@@ -193,7 +199,7 @@ public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransactio
         .onEndOfBatch(processor::endOfBatch)
         .onPartitionAssigned(processor::partitionAssigned)
         .onPartitionRevoked(processor::partitionRevoked)
-        .onEachRecord { processor.record(it.consumerRecord, it.key, it.partitionKey, it.value, it.output, it.transaction) }
+        .onEachRecord { processor.record(it.consumerRecord, it.key, it.partitionKey, it.value, it.timestamp, it.output, it.transaction) }
         .collect()
 }
 
@@ -215,7 +221,7 @@ public suspend fun <Key, Partition, Value> Flow<KafkaMessage<Key, Partition, Val
 public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<KafkaMessage<Key, Partition, Value, Unit, Transaction>>.mapValueToOutput(
     block: suspend (Key, Value) -> Output
 ): Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>> {
-    return mapRecord { record -> Record(record.consumerRecord, record.key, record.partitionKey, record.value, block.invoke(record.key, record.value), record.transaction) }
+    return mapRecord { record -> Record(record.consumerRecord, record.key, record.partitionKey, record.value, record.timestamp, block.invoke(record.key, record.value), record.transaction) }
 }
 
 public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>>.groupByPartitionKey(

@@ -11,6 +11,7 @@ import kotlinx.coroutines.*
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
 import java.time.Duration
+import java.time.Instant
 
 public class TransactionProcessor<Key, PartitionKey, Value, Output>(
     maxOpenTransactions: Int, private val commitInterval: Duration
@@ -25,6 +26,7 @@ public class TransactionProcessor<Key, PartitionKey, Value, Output>(
         key: Key,
         partitionKey: PartitionKey,
         value: Value,
+        timestamp: Instant,
         output: Output,
         transaction: WithoutTransaction
     ): Record<Key, PartitionKey, Value, Output, WithTransaction> {
@@ -35,6 +37,7 @@ public class TransactionProcessor<Key, PartitionKey, Value, Output>(
             key,
             partitionKey,
             value,
+            timestamp,
             output,
             newTransaction
         )

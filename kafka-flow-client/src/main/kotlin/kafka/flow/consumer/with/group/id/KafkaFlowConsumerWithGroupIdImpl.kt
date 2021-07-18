@@ -121,7 +121,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
         val records = delegateMutex.withLock { delegate.poll(pollDuration) }
         partitionChangedMessages.forEach { channel.send(it) }
         partitionChangedMessages.clear()
-        records.map { Record(it, Unit, Unit, Unit, Unit, WithoutTransaction) }.forEach { channel.send(it) }
+        records.map { Record(it, Unit, Unit, Unit, Instant.ofEpochMilli(it.timestamp()), Unit, WithoutTransaction) }.forEach { channel.send(it) }
         if (records.isEmpty) yield()
         if (!records.isEmpty) channel.send(EndOfBatch())
     }

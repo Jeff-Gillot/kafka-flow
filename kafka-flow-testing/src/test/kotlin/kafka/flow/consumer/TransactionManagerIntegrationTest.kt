@@ -11,9 +11,7 @@ import kafka.flow.testing.TestObject
 import kafka.flow.testing.TestTopicDescriptor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.filterIsInstance
-import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.apache.kafka.clients.admin.AdminClient
@@ -30,8 +28,10 @@ import org.testcontainers.utility.DockerImageName
 import strikt.api.expectThat
 import strikt.assertions.isEqualTo
 import java.util.*
+import java.util.concurrent.TimeUnit
 
 
+@Suppress("BlockingMethodInNonBlockingContext")
 class TransactionManagerIntegrationTest {
     private lateinit var topic: TopicDescriptor<TestObject.Key, String, TestObject>
     private lateinit var producer: KafkaFlowTopicProducer<TestObject.Key, String, TestObject>
@@ -128,7 +128,7 @@ class TransactionManagerIntegrationTest {
         repeat(20) { producer.send(TestObject.random()) }
 
         Await().untilAsserted {
-            val committedOffsets: Map<TopicPartition, Long> = admin.listConsumerGroupOffsets(groupId).partitionsToOffsetAndMetadata().get().mapValues { (_, value) -> value.offset() }
+            val committedOffsets: Map<TopicPartition, Long> = admin.listConsumerGroupOffsets(groupId).partitionsToOffsetAndMetadata().get(30, TimeUnit.SECONDS).mapValues { (_, value) -> value.offset() }
             expectThat(committedOffsets.values.sum()).isEqualTo(10)
         }
     }
