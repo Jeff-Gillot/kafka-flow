@@ -8,6 +8,7 @@ import kafka.flow.testing.Await
 import kafka.flow.testing.TestObject
 import kafka.flow.testing.TestServer
 import kafka.flow.testing.TestTopicDescriptor
+import kotlinx.coroutines.launch
 import org.junit.Test
 import strikt.api.expectThat
 import strikt.assertions.containsExactlyInAnyOrder
@@ -23,7 +24,8 @@ class CacheConsumerTest : KafkaServerIntegrationTest() {
         val topic = TestTopicDescriptor.next()
         TestServer.admin().createTopics(topic)
 
-        val cache = TestServer.from(topic).startCacheConsumer()
+        val cache = TestServer.from(topic).cacheConsumer()
+        launch { cache.startConsuming() }
 
         expectThat(cache.all()).isEmpty()
     }
@@ -33,7 +35,8 @@ class CacheConsumerTest : KafkaServerIntegrationTest() {
         val topic = TestTopicDescriptor.next()
         TestServer.admin().createTopics(topic)
 
-        val cache = TestServer.from(topic).startCacheConsumer()
+        val cache = TestServer.from(topic).cacheConsumer()
+        launch { cache.startConsuming() }
         val value = TestObject.random()
         TestServer.on(topic).send(value)
         TestServer.on(topic).send(value)
@@ -51,7 +54,8 @@ class CacheConsumerTest : KafkaServerIntegrationTest() {
         val topic = TestTopicDescriptor.next()
         TestServer.admin().createTopics(topic)
 
-        val cache = TestServer.from(topic).startCacheConsumer()
+        val cache = TestServer.from(topic).cacheConsumer()
+        launch { cache.startConsuming() }
         val value1 = TestObject.random()
         val value2 = TestObject.random()
         TestServer.on(topic).send(value1)
@@ -71,7 +75,8 @@ class CacheConsumerTest : KafkaServerIntegrationTest() {
         val topic = TestTopicDescriptor.next()
         TestServer.admin().createTopics(topic)
 
-        val cache = TestServer.from(topic).startCacheConsumer()
+        val cache = TestServer.from(topic).cacheConsumer()
+        launch { cache.startConsuming() }
         val value1 = TestObject.random()
         val value2 = value1.copy(value = "newValue")
         TestServer.on(topic).send(value1)
@@ -90,7 +95,8 @@ class CacheConsumerTest : KafkaServerIntegrationTest() {
         val topic = TestTopicDescriptor.next()
         TestServer.admin().createTopics(topic)
 
-        val cache = TestServer.from(topic).startCacheConsumer(1.hour())
+        val cache = TestServer.from(topic).cacheConsumer(1.hour())
+        launch { cache.startConsuming() }
         val value1 = TestObject.random()
         val value2 = TestObject.random().copy(timestamp = Instant.now() - 1.day())
         TestServer.on(topic).send(value1)
@@ -109,7 +115,8 @@ class CacheConsumerTest : KafkaServerIntegrationTest() {
         val topic = TestTopicDescriptor.next()
         TestServer.admin().createTopics(topic)
 
-        val cache = TestServer.from(topic).startCacheConsumer(5.seconds(), 1.second())
+        val cache = TestServer.from(topic).cacheConsumer(5.seconds(), 1.second())
+        launch { cache.startConsuming() }
         val value1 = TestObject.random()
         TestServer.on(topic).send(value1)
 

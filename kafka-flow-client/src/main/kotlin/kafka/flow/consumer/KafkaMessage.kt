@@ -2,6 +2,7 @@ package kafka.flow.consumer
 
 import kafka.flow.consumer.with.group.id.MaybeTransaction
 import kafka.flow.consumer.with.group.id.WithoutTransaction
+import kotlinx.coroutines.flow.Flow
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
 import java.time.Instant
@@ -34,7 +35,7 @@ public data class PartitionsRevoked<Key, PartitionKey, Value, Output, Transactio
 
 public interface FlowControlMessage<Key, PartitionKey, Value, Output, Transaction : MaybeTransaction> : KafkaMessage<Key, PartitionKey, Value, Output, Transaction>
 public data class StartConsuming<Key, PartitionKey, Value, Output, Transaction : MaybeTransaction>(
-    public val client: KafkaFlowConsumer<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>
+    public val client: KafkaFlowConsumer<Flow<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>>
 ) : FlowControlMessage<Key, PartitionKey, Value, Output, Transaction>
 
 public class StopConsuming<Key, PartitionKey, Value, Output, Transaction : MaybeTransaction> : FlowControlMessage<Key, PartitionKey, Value, Output, Transaction>

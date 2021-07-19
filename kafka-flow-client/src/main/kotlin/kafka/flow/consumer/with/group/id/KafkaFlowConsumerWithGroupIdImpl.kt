@@ -41,6 +41,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
     private val pollDuration = 10.milliseconds()
 
     init {
+        println(clientProperties[ConsumerConfig.GROUP_ID_CONFIG])
         requireNotNull(clientProperties[ConsumerConfig.GROUP_ID_CONFIG]) { "${ConsumerConfig.GROUP_ID_CONFIG} must be set" }
     }
 

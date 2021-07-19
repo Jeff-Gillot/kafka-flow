@@ -6,6 +6,7 @@ import kafka.flow.consumer.Record
 import kafka.flow.consumer.with.group.id.MaybeTransaction
 import kafka.flow.consumer.with.group.id.WithTransaction
 import kafka.flow.consumer.with.group.id.WithoutTransaction
+import kotlinx.coroutines.flow.Flow
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
 import java.time.Instant
@@ -21,7 +22,7 @@ public interface Sink<Key, PartitionKey, Value, Output, Transaction : MaybeTrans
         transaction: Transaction
     )
 
-    public suspend fun startConsuming(client: KafkaFlowConsumer<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>) {}
+    public suspend fun startConsuming(client: KafkaFlowConsumer<Flow<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>>) {}
     public suspend fun stopConsuming() {}
     public suspend fun endOfBatch() {}
     public suspend fun completion() {}

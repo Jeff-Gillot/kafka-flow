@@ -98,7 +98,7 @@ public fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<
 }
 
 public fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>>.onStartConsuming(
-    block: suspend (client: KafkaFlowConsumer<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>) -> Unit
+    block: suspend (client: KafkaFlowConsumer<Flow<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>>) -> Unit
 ): Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>> {
     return onEach { message ->
         if (message is StartConsuming)

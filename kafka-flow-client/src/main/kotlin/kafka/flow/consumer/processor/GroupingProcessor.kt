@@ -21,7 +21,7 @@ public class GroupingProcessor<Key, PartitionKey, Value, Output, Transaction : M
     private val flowFactory: suspend (Flow<KafkaMessage<Key, PartitionKey, Value, Output, Transaction>>, partitionKey: PartitionKey) -> Unit
 ) : Sink<Key, PartitionKey, Value, Output, Transaction> {
     private lateinit var processorTimeoutLoop: Job
-    private lateinit var client: KafkaFlowConsumer<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>
+    private lateinit var client: KafkaFlowConsumer<Flow<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>>
     private val processors = mutableMapOf<PartitionKey, Channel<KafkaMessage<Key, PartitionKey, Value, Output, Transaction>>>()
     private val processorsPartitions = mutableMapOf<PartitionKey, TopicPartition>()
     private val processorLastMessage = mutableMapOf<PartitionKey, Instant>()
@@ -40,7 +40,7 @@ public class GroupingProcessor<Key, PartitionKey, Value, Output, Transaction : M
         channel.send(Record(consumerRecord, key, partitionKey, value, timestamp, output, transaction))
     }
 
-    override suspend fun startConsuming(client: KafkaFlowConsumer<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>) {
+    override suspend fun startConsuming(client: KafkaFlowConsumer<Flow<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>>) {
         this.client = client
 
         processorTimeoutLoop = CoroutineScope(currentCoroutineContext()).launch {

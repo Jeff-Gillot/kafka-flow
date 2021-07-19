@@ -8,6 +8,7 @@ import kafka.flow.consumer.with.group.id.WithoutTransaction
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -20,7 +21,7 @@ public class MemoryCacheSink<Key, PartitionKey, Value>(
     private val retention: Duration?,
     private val cleanupInterval: Duration,
 ) : Sink<Key, PartitionKey, Value?, Unit, WithoutTransaction>, Cache<Key, Value> {
-    private var client: KafkaFlowConsumer<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>? = null
+    private var client: KafkaFlowConsumer<Flow<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>>? = null
     private val data: HashMap<Key, TimedValue<Value>> = HashMap()
     private val mutex = Mutex()
 
@@ -75,7 +76,7 @@ public class MemoryCacheSink<Key, PartitionKey, Value>(
         client!!.waitUntilUpToDate()
     }
 
-    override suspend fun startConsuming(client: KafkaFlowConsumer<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>) {
+    override suspend fun startConsuming(client: KafkaFlowConsumer<Flow<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>>) {
         this.client = client
         if (retention == null) return
         CoroutineScope(currentCoroutineContext()).launch {

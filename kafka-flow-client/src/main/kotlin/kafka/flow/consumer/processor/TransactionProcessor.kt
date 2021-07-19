@@ -8,6 +8,7 @@ import kafka.flow.consumer.with.group.id.TransactionManager
 import kafka.flow.consumer.with.group.id.WithTransaction
 import kafka.flow.consumer.with.group.id.WithoutTransaction
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.Flow
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
 import java.time.Duration
@@ -43,8 +44,8 @@ public class TransactionProcessor<Key, PartitionKey, Value, Output>(
         )
     }
 
-    override suspend fun startConsuming(client: KafkaFlowConsumer<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>) {
-        require(client is KafkaFlowConsumerWithGroupId) { "Creation of transaction can only be done when using a groupId consumer" }
+    override suspend fun startConsuming(client: KafkaFlowConsumer<Flow<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>>) {
+        require(client is KafkaFlowConsumerWithGroupId<*>) { "Creation of transaction can only be done when using a groupId consumer" }
         this.client = client
 
         commitLoop = CoroutineScope(currentCoroutineContext()).launch {
