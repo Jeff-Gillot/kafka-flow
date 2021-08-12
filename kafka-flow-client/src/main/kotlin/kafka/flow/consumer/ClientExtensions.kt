@@ -2,7 +2,6 @@
 
 package kafka.flow.consumer
 
-import be.delta.flow.time.minute
 import be.delta.flow.time.seconds
 import kafka.flow.TopicDescriptor
 import kafka.flow.consumer.processor.*
@@ -10,11 +9,7 @@ import kafka.flow.consumer.with.group.id.MaybeTransaction
 import kafka.flow.consumer.with.group.id.WithTransaction
 import kafka.flow.consumer.with.group.id.WithoutTransaction
 import kafka.flow.producer.KafkaOutput
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
 import org.apache.kafka.common.TopicPartition
 import java.time.Duration
 
@@ -214,6 +209,12 @@ public suspend fun <Key, Partition, Value> Flow<KafkaMessage<Key, Partition, Val
     this.collect(KafkaWriterSink())
 }
 
+@JvmName("writeOutputToKafkaAndCommitKeyPartitionValueUnitWithTransactionKafkaOutput")
+public suspend fun <Key, Partition, Value> Flow<Pair<List<KafkaMessage<Key, Partition, Value, Unit, WithTransaction>>, KafkaOutput>>.writeOutputToKafkaAndCommit() {
+    val kafkaWriter = BufferedKafkaWriterSink<Key, Partition, Value, WithTransaction>()
+    this.collect { kafkaWriter.handleRecords(it) }
+}
+
 public suspend fun <Key, Partition, Value> Flow<KafkaMessage<Key, Partition, Value, KafkaOutput, WithoutTransaction>>.writeOutputToKafka() {
     this.collect(KafkaWriterSink())
 }
@@ -254,3 +255,23 @@ public fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<
             block.invoke(message)
     }
 }
+
+
+public suspend fun <Key, Partition, Value, Transaction : MaybeTransaction> Flow<KafkaMessage<Key, Partition, Value, Unit, Transaction>>.batchRecords(
+    batchSize: Int, timeSpan: Duration
+): Flow<List<KafkaMessage<Key, Partition, Value, Unit, Transaction>>> {
+    return BufferProcessor<Key, Partition, Value, Transaction>(batchSize, timeSpan).start(this)
+}
+
+
+public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<List<KafkaMessage<Key, Partition, Value, Unit, Transaction>>>.mapValuesToOutput(
+    block: suspend (List<Pair<Key, Value>>) -> Output
+): Flow<Pair<List<KafkaMessage<Key, Partition, Value, Unit, Transaction>>, Output>> {
+    return map { records ->
+        val keyValues = records
+            .filterIsInstance<Record<Key, Partition, Value, Unit, Transaction>>()
+            .map { it.key to it.value }
+        records to block.invoke(keyValues)
+    }
+}
+

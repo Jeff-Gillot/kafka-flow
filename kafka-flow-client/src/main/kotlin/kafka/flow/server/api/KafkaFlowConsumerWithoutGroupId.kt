@@ -3,10 +3,8 @@ package kafka.flow.server.api
 import kafka.flow.TopicDescriptor
 import kafka.flow.consumer.*
 import kafka.flow.consumer.KafkaFlowConsumerWithoutGroupId
-import kafka.flow.consumer.without.group.id.KafkaFlowConsumerWithoutGroupIdImpl
-import kafka.flow.consumer.deserializeUsing
 import kafka.flow.consumer.with.group.id.WithoutTransaction
-import kafka.flow.utils.allPartitions
+import kafka.flow.consumer.without.group.id.KafkaFlowConsumerWithoutGroupIdImpl
 import kotlinx.coroutines.flow.Flow
 import org.apache.kafka.common.TopicPartition
 import java.util.*
@@ -28,6 +26,6 @@ public class KafkaFlowConsumerWithoutGroupId<Key, PartitionKey, Value>(
     override fun stop(): Unit = delegate.stop()
     override fun isRunning(): Boolean = delegate.isRunning()
     override suspend fun isUpToDate(): Boolean = delegate.isUpToDate()
-    override suspend fun lag(): Long = delegate.lag()
+    override suspend fun lag(): Long? = delegate.lag()
     override fun close(): Unit = delegate.close()
 }

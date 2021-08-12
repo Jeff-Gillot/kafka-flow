@@ -9,6 +9,9 @@ public data class KafkaOutput(public val records: List<KafkaOutputRecord>) {
         public fun <Key, PartitionKey, Value> forValue(kafkaServer: KafkaServer, topicDescriptor: TopicDescriptor<Key, PartitionKey, Value>, value: Value): KafkaOutput =
             KafkaOutput(listOf(TopicDescriptorRecord.Record(kafkaServer, topicDescriptor, value)))
 
+        public fun <Key, PartitionKey, Value> forValues(kafkaServer: KafkaServer, topicDescriptor: TopicDescriptor<Key, PartitionKey, Value>, values: List<Value>): KafkaOutput =
+            KafkaOutput(values.map { TopicDescriptorRecord.Record(kafkaServer, topicDescriptor, it) })
+
         public fun <Key, PartitionKey, Value> forTombstone(kafkaServer: KafkaServer, topicDescriptor: TopicDescriptor<Key, PartitionKey, Value>, key: Key, timestamp: Instant): KafkaOutput =
             KafkaOutput(listOf(TopicDescriptorRecord.Tombstone(kafkaServer, topicDescriptor, key, timestamp)))
 
