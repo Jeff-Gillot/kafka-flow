@@ -41,7 +41,6 @@ public class KafkaFlowConsumerWithGroupIdImpl(
     private val pollDuration = 10.milliseconds()
 
     init {
-        println(clientProperties[ConsumerConfig.GROUP_ID_CONFIG])
         requireNotNull(clientProperties[ConsumerConfig.GROUP_ID_CONFIG]) { "${ConsumerConfig.GROUP_ID_CONFIG} must be set" }
     }
 
@@ -57,13 +56,17 @@ public class KafkaFlowConsumerWithGroupIdImpl(
     override suspend fun isUpToDate(): Boolean {
         if (stopRequested) return false
         if (!running) return false
-        if (lag() > 0) return false
+        val lag = lag()
+        if (lag == null || lag > 0) return false
         return true
     }
 
-    override suspend fun lag(): Long {
+    override suspend fun lag(): Long? {
+        if (!isRunning()) return null
+        if (assignment.isEmpty()) return 0
+        if (assignment.size != endOffsets.size) return null
+        if (!endOffsets.keys.containsAll(assignment)) return null
         return delegateMutex.withLock {
-            check(isRunning()) { "Lag cannot be computing when the consumer isn't running" }
             endOffsets.map { it.value - delegate.position(it.key) }.sumOf { it.coerceAtLeast(0) }
         }
     }

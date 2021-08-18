@@ -1,6 +1,5 @@
 package kafka.flow.consumer
 
-import kafka.flow.consumer.processor.cache.Cache
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
@@ -13,7 +12,7 @@ public interface KafkaFlowConsumer<ConsumerOutput> {
 
     public fun isRunning(): Boolean
     public suspend fun isUpToDate(): Boolean
-    public suspend fun lag(): Long
+    public suspend fun lag(): Long?
 
     public suspend fun waitUntilUpToDate() {
         while (isRunning() && !isUpToDate()) delay(10)

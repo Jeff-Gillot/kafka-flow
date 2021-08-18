@@ -72,7 +72,7 @@ project(":kafka-flow-testing") {
         implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.0")
         implementation("org.apache.kafka:kafka-clients:$kafkaVersion")
         implementation("io.github.microutils:kotlin-logging-jvm:2.0.6")
-        implementation("org.slf4j:slf4j-simple:1.7.29")
+        api("org.slf4j:slf4j-simple:1.7.29")
         implementation("org.testcontainers:testcontainers:1.15.3")
         implementation("org.testcontainers:kafka:1.15.3")
         implementation( "com.github.Jeff-Gillot:time-extension:1.0.0")
