@@ -40,7 +40,7 @@ subprojects {
             create<MavenPublication>("maven") {
                 groupId = "com.github.Jeff-Gillot.kafka-flow"
                 artifactId = project.name
-                version = "1.0.4"
+                version = "1.0.5-SNAPSHOT"
 
                 from(components["java"])
             }
