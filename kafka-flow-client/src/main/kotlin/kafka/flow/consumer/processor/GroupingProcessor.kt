@@ -76,7 +76,7 @@ public class GroupingProcessor<Key, PartitionKey, Value, Output, Transaction : M
 
     override suspend fun stopConsuming() {
         mutex.withLock {
-            processors.values.forEach { processor ->
+            processors.values.toList().forEach { processor ->
                 CoroutineScope(currentCoroutineContext()).launch {
                     processor.send(StopConsuming())
                 }
@@ -101,7 +101,8 @@ public class GroupingProcessor<Key, PartitionKey, Value, Output, Transaction : M
                 .filterValues { revokedPartition.contains(it) }
                 .keys
                 .associateWith { processors[it] }
-            processorsToRevoke.values.forEach { processor ->
+                .toMap()
+            processorsToRevoke.values.toList().forEach { processor ->
                 if (processor != null) {
                     CoroutineScope(currentCoroutineContext()).launch {
                         processor.send(StopConsuming())
@@ -109,9 +110,9 @@ public class GroupingProcessor<Key, PartitionKey, Value, Output, Transaction : M
                     }
                 }
             }
-            processorsToRevoke.keys.forEach { processors.remove(it!!) }
-            processorsToRevoke.keys.forEach { processorsPartitions.remove(it!!) }
-            processorsToRevoke.keys.forEach { processorLastMessage.remove(it!!) }
+            processorsToRevoke.keys.toList().forEach { processors.remove(it!!) }
+            processorsToRevoke.keys.toList().forEach { processorsPartitions.remove(it!!) }
+            processorsToRevoke.keys.toList().forEach { processorLastMessage.remove(it!!) }
         }
     }
 
