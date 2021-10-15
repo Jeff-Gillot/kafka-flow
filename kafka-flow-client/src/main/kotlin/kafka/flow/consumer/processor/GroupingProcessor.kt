@@ -1,19 +1,27 @@
 package kafka.flow.consumer.processor
 
 import be.delta.flow.time.seconds
-import kafka.flow.consumer.*
+import java.time.Duration
+import java.time.Instant
+import kafka.flow.consumer.KafkaFlowConsumer
+import kafka.flow.consumer.KafkaMessage
+import kafka.flow.consumer.Record
+import kafka.flow.consumer.StartConsuming
+import kafka.flow.consumer.StopConsuming
 import kafka.flow.consumer.with.group.id.MaybeTransaction
 import kafka.flow.consumer.with.group.id.WithoutTransaction
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.consumeAsFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
-import java.time.Duration
-import java.time.Instant
 
 public class GroupingProcessor<Key, PartitionKey, Value, Output, Transaction : MaybeTransaction>(
     private val processorTimeout: Duration,
@@ -46,17 +54,21 @@ public class GroupingProcessor<Key, PartitionKey, Value, Output, Transaction : M
         processorTimeoutLoop = CoroutineScope(currentCoroutineContext()).launch {
             while (true) {
                 delay(1.seconds().toMillis())
-                processorLastMessage
-                    .filterValues { it < Instant.now() - processorTimeout }
-                    .keys
-                    .toList()
-                    .forEach {
+                val processorsToRemove = mutex.withLock {
+                    processorLastMessage
+                        .filterValues { it < Instant.now() - processorTimeout }
+                        .keys
+                        .toList()
+                }
+                processorsToRemove.forEach {
+                    val channel = mutex.withLock {
                         processorLastMessage.remove(it)
                         processorsPartitions.remove(it)
-                        val channel = mutex.withLock { processors.remove(it) }
-                        channel?.send(StopConsuming())
-                        channel?.close()
+                        processors.remove(it)
                     }
+                    channel?.send(StopConsuming())
+                    channel?.close()
+                }
             }
         }
     }
