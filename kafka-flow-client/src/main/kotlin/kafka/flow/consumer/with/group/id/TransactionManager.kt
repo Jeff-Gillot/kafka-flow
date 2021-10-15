@@ -11,6 +11,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
+import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
 public class TransactionManager(private val maxOpenTransactions: Int) {
@@ -55,10 +56,10 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
     }
 
     public suspend fun rollbackAndCommit(client: KafkaFlowConsumerWithGroupId<*>) {
-        println("trying-to-commit")
+        logger.error("trying-to-commit")
         client.rollback(getPartitionsToRollback())
         val offsets = getOffsetsToCommit()
-        println("committing offset $offsets")
+        logger.error("committing offset $offsets")
         client.commit(offsets)
     }
 
@@ -117,5 +118,9 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
 
     private fun transactionsOf(topicPartition: TopicPartition): SortedMap<Long, AtomicInteger> {
         return openTransactions.computeIfAbsent(topicPartition) { TreeMap() }
+    }
+
+    public companion object {
+        private val logger: Logger = LoggerFactory.getLogger(TransactionManager::class.java)
     }
 }
