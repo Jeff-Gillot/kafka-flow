@@ -11,11 +11,10 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
-import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
 public class TransactionManager(private val maxOpenTransactions: Int) {
-    private var openedTransactionCount: Int = 0
+    private var openedTransactionCount = AtomicInteger()
     private val logger = LoggerFactory.getLogger(TransactionManager::class.java)
     private val openTransactions = HashMap<TopicPartition, SortedMap<Long, AtomicInteger>>()
     private val highestTransactions = HashMap<TopicPartition, Long>()
@@ -27,7 +26,7 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
         if (transactionAlreadyExists) return
 
         var logTime = Instant.now() + 10.seconds()
-        while (openedTransactionCount >= maxOpenTransactions) {
+        while (openedTransactionCount.get() >= maxOpenTransactions) {
             if (logTime > Instant.now()) {
                 println("XXX - Too many transactions open, unable to create a transaction for $topicPartition@$offset, waiting until a slot is available")
                 logTime = Instant.now() + 10.seconds()
@@ -37,6 +36,7 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
     }
 
     public suspend fun increaseTransaction(topicPartition: TopicPartition, offset: Long) {
+        println("YYY - New transaction request for $topicPartition@$offset")
         waitTransactionSlotIfNeeded(topicPartition, offset)
         mutex.withLock {
             val transaction = transactionsOf(topicPartition).computeIfAbsent(offset) { AtomicInteger() }
@@ -44,15 +44,18 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
             if (offset > highestTransaction) {
                 highestTransactions[topicPartition] = offset
             }
-            if (transaction.incrementAndGet() == 1) openedTransactionCount++
+            if (transaction.incrementAndGet() == 1) openedTransactionCount.incrementAndGet()
         }
+        println("YYY - New transaction acquired for $topicPartition@$offset")
     }
 
     public suspend fun decreaseTransaction(topicPartition: TopicPartition, offset: Long) {
+        println("YYY - Commit transaction start for $topicPartition@$offset")
         mutex.withLock {
             val transaction = transactionsOf(topicPartition).computeIfAbsent(offset) { AtomicInteger() }
-            if (transaction.decrementAndGet() == 0) openedTransactionCount--
+            if (transaction.decrementAndGet() == 0) openedTransactionCount.decrementAndGet()
         }
+        println("YYY - Commit transaction done for $topicPartition@$offset")
     }
 
     public suspend fun rollbackAndCommit(client: KafkaFlowConsumerWithGroupId<*>) {
@@ -105,7 +108,7 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
                 highestTransactions.remove(topicPartition)
                 openTransactions.remove(topicPartition)
             }
-            openedTransactionCount = openTransactions.values.flatMap { it.values }.map { it.get() }.count { it >= 0 }
+            openedTransactionCount = AtomicInteger(openTransactions.values.flatMap { it.values }.map { it.get() }.count { it >= 0 })
             partitionsToRollback
         } else {
             emptySet()
