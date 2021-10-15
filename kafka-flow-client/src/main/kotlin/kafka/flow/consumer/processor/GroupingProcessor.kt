@@ -63,7 +63,7 @@ public class GroupingProcessor<Key, PartitionKey, Value, Output, Transaction : M
                 }
                 processorsToRemove.forEach {
                     val channel = mutex.withLock {
-                        processorLastMessage.remove(it)
+                        processorLastMessage.remove(it!!)
                         processorsPartitions.remove(it)
                         processors.remove(it)
                     }
@@ -109,9 +109,9 @@ public class GroupingProcessor<Key, PartitionKey, Value, Output, Transaction : M
                     }
                 }
             }
-            processorsToRevoke.keys.forEach { processors.remove(it) }
-            processorsToRevoke.keys.forEach { processorsPartitions.remove(it) }
-            processorsToRevoke.keys.forEach { processorLastMessage.remove(it) }
+            processorsToRevoke.keys.forEach { processors.remove(it!!) }
+            processorsToRevoke.keys.forEach { processorsPartitions.remove(it!!) }
+            processorsToRevoke.keys.forEach { processorLastMessage.remove(it!!) }
         }
     }
 
