@@ -61,15 +61,17 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
 
     private suspend fun getOffsetsToCommit() = mutex.withLock {
         val offsetsToCommit = computeOffsetsToCommit()
-        cleanFinishedTransactions()
+        internalCleanFinishedLocations()
         offsetsToCommit
     }
 
-    public suspend fun cleanFinishedTransactions() {
-        mutex.withLock {
-            openTransactions.values.forEach { transactionMap ->
-                transactionMap.filterValues { it.get() <= 0 }.forEach { transactionMap.remove(it.key) }
-            }
+    public suspend fun cleanFinishedTransactions(): Unit = mutex.withLock {
+        internalCleanFinishedLocations()
+    }
+
+    private fun internalCleanFinishedLocations() {
+        openTransactions.values.forEach { transactionMap ->
+            transactionMap.filterValues { it.get() <= 0 }.forEach { transactionMap.remove(it.key) }
         }
     }
 
