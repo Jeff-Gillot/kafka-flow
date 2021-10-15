@@ -55,8 +55,11 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
     }
 
     public suspend fun rollbackAndCommit(client: KafkaFlowConsumerWithGroupId<*>) {
+        println("trying-to-commit")
         client.rollback(getPartitionsToRollback())
-        client.commit(getOffsetsToCommit())
+        val offsets = getOffsetsToCommit()
+        println("committing offset $offsets")
+        client.commit(offsets)
     }
 
     private suspend fun getOffsetsToCommit() = mutex.withLock {
