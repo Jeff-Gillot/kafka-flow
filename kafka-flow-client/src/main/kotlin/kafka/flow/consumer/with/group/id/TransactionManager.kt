@@ -1,6 +1,10 @@
 package kafka.flow.consumer.with.group.id
 
 import be.delta.flow.time.seconds
+import java.time.Instant
+import java.util.SortedMap
+import java.util.TreeMap
+import java.util.concurrent.atomic.AtomicInteger
 import kafka.flow.consumer.KafkaFlowConsumerWithGroupId
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
@@ -8,9 +12,6 @@ import kotlinx.coroutines.sync.withLock
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
 import org.slf4j.LoggerFactory
-import java.time.Instant
-import java.util.*
-import java.util.concurrent.atomic.AtomicInteger
 
 public class TransactionManager(private val maxOpenTransactions: Int) {
     private var openedTransactionCount: Int = 0
@@ -64,9 +65,11 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
         offsetsToCommit
     }
 
-    public fun cleanFinishedTransactions() {
-        openTransactions.values.forEach { transactionMap ->
-            transactionMap.filterValues { it.get() <= 0 }.forEach { transactionMap.remove(it.key) }
+    public suspend fun cleanFinishedTransactions() {
+        mutex.withLock {
+            openTransactions.values.forEach { transactionMap ->
+                transactionMap.filterValues { it.get() <= 0 }.forEach { transactionMap.remove(it.key) }
+            }
         }
     }
 
