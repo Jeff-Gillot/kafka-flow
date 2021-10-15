@@ -164,7 +164,9 @@ public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransactio
 public fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<KafkaMessage<Key, Partition, Value?, Output, Transaction>>.ignoreTombstones(): Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>> {
     return filter { message ->
         if (message is Record) {
-            message.value != null
+            val result = message.value != null
+            if(!result) message.transaction.unlock()
+            result
         } else {
             true
         }
