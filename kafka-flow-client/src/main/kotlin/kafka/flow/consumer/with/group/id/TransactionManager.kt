@@ -4,6 +4,7 @@ import be.delta.flow.time.seconds
 import java.time.Instant
 import java.util.SortedMap
 import java.util.TreeMap
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kafka.flow.consumer.KafkaFlowConsumerWithGroupId
 import kotlinx.coroutines.delay
@@ -16,8 +17,8 @@ import org.slf4j.LoggerFactory
 public class TransactionManager(private val maxOpenTransactions: Int) {
     private var openedTransactionCount = AtomicInteger()
     private val logger = LoggerFactory.getLogger(TransactionManager::class.java)
-    private val openTransactions = HashMap<TopicPartition, SortedMap<Long, AtomicInteger>>()
-    private val highestTransactions = HashMap<TopicPartition, Long>()
+    private val openTransactions = ConcurrentHashMap<TopicPartition, SortedMap<Long, AtomicInteger>>()
+    private val highestTransactions = ConcurrentHashMap<TopicPartition, Long>()
     private var topicPartitionToRollback = mutableSetOf<TopicPartition>()
     private val mutex = Mutex()
 
@@ -36,7 +37,7 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
     }
 
     public suspend fun increaseTransaction(topicPartition: TopicPartition, offset: Long) {
-        println("YYY - New transaction request for $topicPartition@$offset")
+//        println("YYY - New transaction request for $topicPartition@$offset")
         waitTransactionSlotIfNeeded(topicPartition, offset)
         mutex.withLock {
             val transaction = transactionsOf(topicPartition).computeIfAbsent(offset) { AtomicInteger() }
@@ -46,20 +47,20 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
             }
             if (transaction.incrementAndGet() == 1) openedTransactionCount.incrementAndGet()
         }
-        println("YYY - New transaction acquired for $topicPartition@$offset")
+//        println("YYY - New transaction acquired for $topicPartition@$offset")
     }
 
     public suspend fun decreaseTransaction(topicPartition: TopicPartition, offset: Long) {
-        println("YYY - Commit transaction start for $topicPartition@$offset")
+//        println("YYY - Commit transaction start for $topicPartition@$offset")
         mutex.withLock {
             val transaction = transactionsOf(topicPartition).computeIfAbsent(offset) { AtomicInteger() }
             if (transaction.decrementAndGet() == 0) openedTransactionCount.decrementAndGet()
         }
-        println("YYY - Commit transaction done for $topicPartition@$offset")
+//        println("YYY - Commit transaction done for $topicPartition@$offset")
     }
 
     public suspend fun rollbackAndCommit(client: KafkaFlowConsumerWithGroupId<*>) {
-        println("XXX - trying-to-commit")
+        println("XXX - trying-to-commit for ${highestTransactions.keys().toList()}")
         client.rollback(getPartitionsToRollback())
         val offsets = getOffsetsToCommit()
         println("XXX - committing offset $offsets")
