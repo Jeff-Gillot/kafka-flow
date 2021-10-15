@@ -3,6 +3,7 @@ package kafka.flow.consumer.processor
 import be.delta.flow.time.seconds
 import java.time.Duration
 import java.time.Instant
+import java.util.concurrent.ConcurrentHashMap
 import kafka.flow.consumer.KafkaFlowConsumer
 import kafka.flow.consumer.KafkaMessage
 import kafka.flow.consumer.Record
@@ -30,9 +31,9 @@ public class GroupingProcessor<Key, PartitionKey, Value, Output, Transaction : M
 ) : Sink<Key, PartitionKey, Value, Output, Transaction> {
     private lateinit var processorTimeoutLoop: Job
     private lateinit var client: KafkaFlowConsumer<Flow<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>>
-    private val processors = mutableMapOf<PartitionKey, Channel<KafkaMessage<Key, PartitionKey, Value, Output, Transaction>>>()
-    private val processorsPartitions = mutableMapOf<PartitionKey, TopicPartition>()
-    private val processorLastMessage = mutableMapOf<PartitionKey, Instant>()
+    private val processors = ConcurrentHashMap<PartitionKey, Channel<KafkaMessage<Key, PartitionKey, Value, Output, Transaction>>>()
+    private val processorsPartitions = ConcurrentHashMap<PartitionKey, TopicPartition>()
+    private val processorLastMessage = ConcurrentHashMap<PartitionKey, Instant>()
     private val mutex = Mutex()
 
     override suspend fun record(
@@ -114,8 +115,7 @@ public class GroupingProcessor<Key, PartitionKey, Value, Output, Transaction : M
         }
     }
 
-    private suspend fun getOrCreateProcessor(partitionKey: PartitionKey, consumerRecord: ConsumerRecord<ByteArray, ByteArray>): Channel<KafkaMessage<Key, PartitionKey, Value, Output, Transaction>> {
-        return mutex.withLock {
+    private suspend fun getOrCreateProcessor(partitionKey: PartitionKey, consumerRecord: ConsumerRecord<ByteArray, ByteArray>): Channel<KafkaMessage<Key, PartitionKey, Value, Output, Transaction>> = mutex.withLock {
             processorLastMessage[partitionKey] = Instant.now()
             var channel = processors[partitionKey]
             if (channel != null) return channel
@@ -129,5 +129,4 @@ public class GroupingProcessor<Key, PartitionKey, Value, Output, Transaction : M
             channel.send(StartConsuming(client))
             channel
         }
-    }
 }
