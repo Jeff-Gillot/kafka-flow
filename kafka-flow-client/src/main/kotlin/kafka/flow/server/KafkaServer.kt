@@ -4,6 +4,7 @@ import kafka.flow.TopicDescriptor
 import kafka.flow.producer.KafkaFlowTopicProducer
 import org.apache.kafka.clients.CommonClientConfigs
 import java.util.*
+import java.util.concurrent.ConcurrentHashMap
 
 @Suppress("UNCHECKED_CAST")
 public open class KafkaServer(private val config: Properties) {
@@ -11,7 +12,7 @@ public open class KafkaServer(private val config: Properties) {
     public constructor(block: ServerBuilder.() -> Unit) : this(ServerBuilder().apply(block).build())
     public constructor(bootstrapUrl: String) : this(ServerBuilder().apply { this.bootstrapUrl = bootstrapUrl }.build())
 
-    private val producers = mutableMapOf<TopicDescriptor<*, *, *>, KafkaFlowTopicProducer<*, *, *>>()
+    private val producers = ConcurrentHashMap<TopicDescriptor<*, *, *>, KafkaFlowTopicProducer<*, *, *>>()
     private val admin by lazy { KafkaAdministration(config) }
 
     public fun <Key, PartitionKey, Value> on(topicDescriptor: TopicDescriptor<Key, PartitionKey, Value>): KafkaFlowTopicProducer<Key, PartitionKey, Value> {
