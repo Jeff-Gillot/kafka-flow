@@ -29,7 +29,7 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
         var logTime = Instant.now() + 10.seconds()
         while (openedTransactionCount.get() >= maxOpenTransactions) {
             if (logTime > Instant.now()) {
-                println("XXX - Too many transactions open, unable to create a transaction for $topicPartition@$offset, waiting until a slot is available")
+                println("Too many transactions open, unable to create a transaction for $topicPartition@$offset, waiting until a slot is available")
                 logTime = Instant.now() + 10.seconds()
             }
             delay(1)
@@ -37,7 +37,6 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
     }
 
     public suspend fun increaseTransaction(topicPartition: TopicPartition, offset: Long) {
-//        println("YYY - New transaction request for $topicPartition@$offset")
         waitTransactionSlotIfNeeded(topicPartition, offset)
         mutex.withLock {
             val transaction = transactionsOf(topicPartition).computeIfAbsent(offset) { AtomicInteger() }
@@ -47,23 +46,18 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
             }
             if (transaction.incrementAndGet() == 1) openedTransactionCount.incrementAndGet()
         }
-//        println("YYY - New transaction acquired for $topicPartition@$offset")
     }
 
     public suspend fun decreaseTransaction(topicPartition: TopicPartition, offset: Long) {
-//        println("YYY - Commit transaction start for $topicPartition@$offset")
         mutex.withLock {
             val transaction = transactionsOf(topicPartition).computeIfAbsent(offset) { AtomicInteger() }
             if (transaction.decrementAndGet() == 0) openedTransactionCount.decrementAndGet()
         }
-//        println("YYY - Commit transaction done for $topicPartition@$offset")
     }
 
     public suspend fun rollbackAndCommit(client: KafkaFlowConsumerWithGroupId<*>) {
-        println("XXX - trying-to-commit for ${highestTransactions.keys().toList()}")
         client.rollback(getPartitionsToRollback())
         val offsets = getOffsetsToCommit()
-        println("XXX - committing offset $offsets")
         client.commit(offsets)
     }
 
@@ -101,20 +95,22 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
     }
 
 
-    private suspend fun getPartitionsToRollback() = mutex.withLock {
+    private suspend fun getPartitionsToRollback() =
         if (topicPartitionToRollback.isNotEmpty()) {
-            val partitionsToRollback = topicPartitionToRollback
-            topicPartitionToRollback = mutableSetOf()
-            partitionsToRollback.forEach { topicPartition ->
-                highestTransactions.remove(topicPartition)
-                openTransactions.remove(topicPartition)
+            mutex.withLock {
+                val partitionsToRollback = topicPartitionToRollback
+                topicPartitionToRollback = mutableSetOf()
+                partitionsToRollback.forEach { topicPartition ->
+                    highestTransactions.remove(topicPartition)
+                    openTransactions.remove(topicPartition)
+                }
+                openedTransactionCount = AtomicInteger(openTransactions.values.flatMap { it.values }.map { it.get() }.count { it >= 0 })
+                partitionsToRollback
             }
-            openedTransactionCount = AtomicInteger(openTransactions.values.flatMap { it.values }.map { it.get() }.count { it >= 0 })
-            partitionsToRollback
         } else {
             emptySet()
         }
-    }
+
 
     public suspend fun markRollback(topicPartition: TopicPartition): Unit = mutex.withLock {
         topicPartitionToRollback.add(topicPartition)
