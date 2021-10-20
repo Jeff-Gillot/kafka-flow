@@ -2,15 +2,34 @@ package kafka.flow.consumer.with.group.id
 
 import be.delta.flow.time.milliseconds
 import be.delta.flow.time.seconds
-import kafka.flow.consumer.*
-import kotlinx.coroutines.*
+import java.time.Instant
+import java.util.Properties
+import kafka.flow.consumer.AutoStopPolicy
+import kafka.flow.consumer.EndOfBatch
+import kafka.flow.consumer.KafkaFlowConsumerWithGroupId
+import kafka.flow.consumer.KafkaMessage
+import kafka.flow.consumer.PartitionChangedMessage
+import kafka.flow.consumer.PartitionsAssigned
+import kafka.flow.consumer.PartitionsRevoked
+import kafka.flow.consumer.Record
+import kafka.flow.consumer.StartConsuming
+import kafka.flow.consumer.StartOffsetPolicy
+import kafka.flow.consumer.StopConsuming
+import kotlin.coroutines.EmptyCoroutineContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.consumeAsFlow
 import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.yield
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener
 import org.apache.kafka.clients.consumer.KafkaConsumer
@@ -18,9 +37,6 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.slf4j.LoggerFactory
-import java.time.Instant
-import java.util.*
-import kotlin.coroutines.EmptyCoroutineContext
 
 public class KafkaFlowConsumerWithGroupIdImpl(
     clientProperties: Properties,
@@ -67,7 +83,9 @@ public class KafkaFlowConsumerWithGroupIdImpl(
         if (assignment.size != endOffsets.size) return null
         if (!endOffsets.keys.containsAll(assignment)) return null
         return delegateMutex.withLock {
-            endOffsets.map { it.value - delegate.position(it.key) }.sumOf { it.coerceAtLeast(0) }
+            runCatching {
+                endOffsets.map { it.value - delegate.position(it.key) }.sumOf { it.coerceAtLeast(0) }
+            }.getOrDefault(null)
         }
     }
 
