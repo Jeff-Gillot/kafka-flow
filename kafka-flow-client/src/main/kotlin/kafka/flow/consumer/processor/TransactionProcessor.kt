@@ -1,5 +1,7 @@
 package kafka.flow.consumer.processor
 
+import java.time.Duration
+import java.time.Instant
 import kafka.flow.consumer.KafkaFlowConsumer
 import kafka.flow.consumer.KafkaFlowConsumerWithGroupId
 import kafka.flow.consumer.KafkaMessage
@@ -7,12 +9,17 @@ import kafka.flow.consumer.Record
 import kafka.flow.consumer.with.group.id.TransactionManager
 import kafka.flow.consumer.with.group.id.WithTransaction
 import kafka.flow.consumer.with.group.id.WithoutTransaction
-import kotlinx.coroutines.*
+import kafka.flow.utils.logger
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
-import java.time.Duration
-import java.time.Instant
 
 public class TransactionProcessor<Key, PartitionKey, Value, Output>(
     maxOpenTransactions: Int, private val commitInterval: Duration
@@ -21,6 +28,7 @@ public class TransactionProcessor<Key, PartitionKey, Value, Output>(
     private val transactionManager = TransactionManager(maxOpenTransactions)
     private var client: KafkaFlowConsumerWithGroupId<*>? = null
     private var commitLoop: Job? = null
+    private val logger = logger()
 
     override suspend fun record(
         consumerRecord: ConsumerRecord<ByteArray, ByteArray>,
@@ -49,19 +57,32 @@ public class TransactionProcessor<Key, PartitionKey, Value, Output>(
         this.client = client
 
         commitLoop = CoroutineScope(currentCoroutineContext()).launch {
-            while (true) {
-                delay(commitInterval.toMillis())
-                transactionManager.rollbackAndCommit(client)
+            try {
+                while (isActive) {
+                    try {
+                        delay(commitInterval.toMillis())
+                        transactionManager.rollbackAndCommit(client)
+                    } catch (cancellation: CancellationException) {
+                    } catch (exception: Exception) {
+                        logger.warn("Error while trying to commit the offsets to the server", exception)
+                    }
+                }
+            } finally {
+                logger.error("Exiting the commit loop")
             }
         }
     }
 
     override suspend fun endOfBatch() {
-        client?.let { transactionManager.cleanFinishedTransactions() }
+        transactionManager.cleanFinishedTransactions()
     }
 
     override suspend fun completion() {
         commitLoop?.cancel()
         client?.let { transactionManager.rollbackAndCommit(it) }
+    }
+
+    override suspend fun partitionRevoked(revokedPartition: List<TopicPartition>, assignment: List<TopicPartition>) {
+        transactionManager.removePartition(revokedPartition)
     }
 }

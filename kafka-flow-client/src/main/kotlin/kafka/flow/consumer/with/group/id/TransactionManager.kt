@@ -3,13 +3,11 @@ package kafka.flow.consumer.with.group.id
 import be.delta.flow.time.seconds
 import java.time.Instant
 import java.util.SortedMap
-import java.util.TreeMap
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentSkipListMap
 import java.util.concurrent.atomic.AtomicInteger
 import kafka.flow.consumer.KafkaFlowConsumerWithGroupId
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
 import org.slf4j.LoggerFactory
@@ -17,13 +15,12 @@ import org.slf4j.LoggerFactory
 public class TransactionManager(private val maxOpenTransactions: Int) {
     private var openedTransactionCount = AtomicInteger()
     private val logger = LoggerFactory.getLogger(TransactionManager::class.java)
-    private val openTransactions = ConcurrentHashMap<TopicPartition, SortedMap<Long, AtomicInteger>>()
+    private val openTransactions = ConcurrentHashMap<TopicPartition, ConcurrentSkipListMap<Long, AtomicInteger>>()
     private val highestTransactions = ConcurrentHashMap<TopicPartition, Long>()
     private var topicPartitionToRollback = mutableSetOf<TopicPartition>()
-    private val mutex = Mutex()
 
     private suspend fun waitTransactionSlotIfNeeded(topicPartition: TopicPartition, offset: Long) {
-        val transactionAlreadyExists = mutex.withLock { transactionsOf(topicPartition).containsKey(offset) }
+        val transactionAlreadyExists = transactionsOf(topicPartition).containsKey(offset)
         if (transactionAlreadyExists) return
 
         var logTime = Instant.now() + 10.seconds()
@@ -38,21 +35,15 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
 
     public suspend fun increaseTransaction(topicPartition: TopicPartition, offset: Long) {
         waitTransactionSlotIfNeeded(topicPartition, offset)
-        mutex.withLock {
-            val transaction = transactionsOf(topicPartition).computeIfAbsent(offset) { AtomicInteger() }
-            val highestTransaction = highestTransactions.computeIfAbsent(topicPartition) { offset }
-            if (offset > highestTransaction) {
-                highestTransactions[topicPartition] = offset
-            }
-            if (transaction.incrementAndGet() == 1) openedTransactionCount.incrementAndGet()
-        }
+        val transaction = transactionsOf(topicPartition).computeIfAbsent(offset) { AtomicInteger() }
+        highestTransactions.computeIfAbsent(topicPartition) { offset }
+        highestTransactions.computeIfPresent(topicPartition) { _, previousOffset -> maxOf(offset, previousOffset) }
+        if (transaction.incrementAndGet() == 1) openedTransactionCount.incrementAndGet()
     }
 
-    public suspend fun decreaseTransaction(topicPartition: TopicPartition, offset: Long) {
-        mutex.withLock {
-            val transaction = transactionsOf(topicPartition).computeIfAbsent(offset) { AtomicInteger() }
-            if (transaction.decrementAndGet() == 0) openedTransactionCount.decrementAndGet()
-        }
+    public fun decreaseTransaction(topicPartition: TopicPartition, offset: Long) {
+        val transaction = transactionsOf(topicPartition).computeIfAbsent(offset) { AtomicInteger() }
+        if (transaction.decrementAndGet() == 0) openedTransactionCount.decrementAndGet()
     }
 
     public suspend fun rollbackAndCommit(client: KafkaFlowConsumerWithGroupId<*>) {
@@ -61,17 +52,13 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
         client.commit(offsets)
     }
 
-    private suspend fun getOffsetsToCommit() = mutex.withLock {
+    private fun getOffsetsToCommit(): Map<TopicPartition, OffsetAndMetadata> {
         val offsetsToCommit = computeOffsetsToCommit()
-        internalCleanFinishedLocations()
-        offsetsToCommit
+        cleanFinishedTransactions()
+        return offsetsToCommit
     }
 
-    public suspend fun cleanFinishedTransactions(): Unit = mutex.withLock {
-        internalCleanFinishedLocations()
-    }
-
-    private fun internalCleanFinishedLocations() {
+    public fun cleanFinishedTransactions() {
         openTransactions.values.forEach { transactionMap ->
             transactionMap.filterValues { it.get() <= 0 }.forEach { transactionMap.remove(it.key) }
         }
@@ -95,28 +82,33 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
     }
 
 
-    private suspend fun getPartitionsToRollback() =
+    private fun getPartitionsToRollback() =
         if (topicPartitionToRollback.isNotEmpty()) {
-            mutex.withLock {
-                val partitionsToRollback = topicPartitionToRollback
-                topicPartitionToRollback = mutableSetOf()
-                partitionsToRollback.forEach { topicPartition ->
-                    highestTransactions.remove(topicPartition)
-                    openTransactions.remove(topicPartition)
-                }
-                openedTransactionCount = AtomicInteger(openTransactions.values.flatMap { it.values }.map { it.get() }.count { it >= 0 })
-                partitionsToRollback
+            val partitionsToRollback = topicPartitionToRollback
+            partitionsToRollback.forEach { topicPartition ->
+                highestTransactions.remove(topicPartition)
+                openTransactions.remove(topicPartition)
             }
+            topicPartitionToRollback = mutableSetOf()
+            openedTransactionCount = AtomicInteger(openTransactions.values.flatMap { it.values }.map { it.get() }.count { it >= 0 })
+            partitionsToRollback
         } else {
             emptySet()
         }
 
 
-    public suspend fun markRollback(topicPartition: TopicPartition): Unit = mutex.withLock {
+    public fun markRollback(topicPartition: TopicPartition) {
         topicPartitionToRollback.add(topicPartition)
     }
 
     private fun transactionsOf(topicPartition: TopicPartition): SortedMap<Long, AtomicInteger> {
-        return openTransactions.computeIfAbsent(topicPartition) { TreeMap() }
+        return openTransactions.computeIfAbsent(topicPartition) { ConcurrentSkipListMap() }
+    }
+
+    public fun removePartition(revokedPartition: List<TopicPartition>) {
+        revokedPartition.forEach {
+            openTransactions.remove(it)
+            highestTransactions.remove(it)
+        }
     }
 }
