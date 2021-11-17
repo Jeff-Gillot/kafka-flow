@@ -99,8 +99,11 @@ public class KafkaFlowConsumerWithGroupIdImpl(
     }
 
     override suspend fun commit(commitOffsets: Map<TopicPartition, OffsetAndMetadata>) {
-        if (commitOffsets.isEmpty()) return
-        retryUntilSuccess {
+        if (commitOffsets.isEmpty()) {
+            println("XXX - Nothing to commit")
+            return
+        }
+        val result = retryUntilSuccess {
             var result: Result<Unit> = Result.success(Unit)
             val mutex = Mutex(true)
             delegateMutex.withLock {
@@ -126,6 +129,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
             mutex.lock()
             result
         }
+        println("Commit result $result")
     }
 
     private suspend fun <T> retryUntilSuccess(block: suspend () -> Result<T>): T {
