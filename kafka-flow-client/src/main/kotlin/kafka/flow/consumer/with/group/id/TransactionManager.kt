@@ -13,8 +13,8 @@ import org.apache.kafka.common.TopicPartition
 import org.slf4j.LoggerFactory
 
 public class TransactionManager(private val maxOpenTransactions: Int) {
-    private var openedTransactionCount = AtomicInteger()
     private val logger = LoggerFactory.getLogger(TransactionManager::class.java)
+    private var openedTransactionCount = AtomicInteger()
     private val openTransactions = ConcurrentHashMap<TopicPartition, ConcurrentSkipListMap<Long, AtomicInteger>>()
     private val highestTransactions = ConcurrentHashMap<TopicPartition, Long>()
     private var topicPartitionToRollback = mutableSetOf<TopicPartition>()
@@ -25,7 +25,7 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
 
         var logTime = Instant.now() + 10.seconds()
         while (openedTransactionCount.get() >= maxOpenTransactions) {
-            if (logTime > Instant.now()) {
+            if (logTime < Instant.now()) {
                 println("Too many transactions open, unable to create a transaction for $topicPartition@$offset, waiting until a slot is available")
                 logTime = Instant.now() + 10.seconds()
             }
@@ -49,7 +49,9 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
     public suspend fun rollbackAndCommit(client: KafkaFlowConsumerWithGroupId<*>) {
         client.rollback(getPartitionsToRollback())
         val offsets = getOffsetsToCommit()
+        println("XXX - Committing $offsets")
         client.commit(offsets)
+        println("XXX - Commit done $offsets")
     }
 
     private fun getOffsetsToCommit(): Map<TopicPartition, OffsetAndMetadata> {
