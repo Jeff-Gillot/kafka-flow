@@ -113,14 +113,18 @@ public class KafkaFlowConsumerWithGroupIdImpl(
                     } else {
                         delegate.commitAsync(commitOffsets) { offsets, exception ->
                             result = if (exception != null) {
+                                println("XXX - Error during commit ${exception.message}")
                                 logger.warn("Error while committing offsets ($offsets)", exception)
                                 Result.failure(exception)
                             } else {
+                                println("XXX - Commit ok $offsets")
                                 Result.success(Unit)
                             }
                         }
                     }
                 } catch (throwable: Throwable) {
+                    println("XXX - Error during commit ${throwable.message}")
+                    throwable.printStackTrace()
                     result = Result.failure(throwable)
                 } finally {
                     mutex.unlock()
