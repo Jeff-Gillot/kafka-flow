@@ -89,7 +89,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
             val endOffset = endOffsets[it]
             val position = positions[it]
             if (position != null && endOffset != null) {
-                (endOffset - (position + 1)).coerceAtLeast(0)
+                (endOffset - position).coerceAtLeast(0)
             } else if (endOffset == 0L) {
                 0
             } else {
@@ -194,8 +194,8 @@ public class KafkaFlowConsumerWithGroupIdImpl(
         val records = delegateMutex.withLock { delegate.poll(pollDuration) }
         records.groupBy { TopicPartition(it.topic(), it.partition()) }.forEach { (topicPartition, records) ->
             val lastOffset = records.last().offset()
-            positions.computeIfAbsent(topicPartition) { lastOffset }
-            positions.computeIfPresent(topicPartition) { _, _ -> lastOffset }
+            positions.computeIfAbsent(topicPartition) { lastOffset + 1}
+            positions.computeIfPresent(topicPartition) { _, _ -> lastOffset + 1}
         }
         partitionChangedMessages.forEach { channel.send(it) }
         partitionChangedMessages.clear()

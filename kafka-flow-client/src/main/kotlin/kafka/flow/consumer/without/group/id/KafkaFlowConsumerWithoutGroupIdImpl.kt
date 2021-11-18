@@ -82,16 +82,14 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
         val lags = assignment.map {
             val endOffset = endOffsets[it]
             val position = positions[it]
-            println("end $endOffset - position $position")
             if (position != null && endOffset != null) {
-                (endOffset - (position + 1)).coerceAtLeast(0)
+                (endOffset - position).coerceAtLeast(0)
             } else if (endOffset == 0L) {
                 0
             } else {
                 null
             }
         }
-        println(lags)
         if (lags.contains(null)) return null
         return lags.filterNotNull().sum()
     }
@@ -128,8 +126,8 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
         val records = delegateMutex.withLock { delegate.poll(pollDuration) }
         records.groupBy { TopicPartition(it.topic(), it.partition()) }.forEach { (topicPartition, records) ->
             val lastOffset = records.last().offset()
-            positions.computeIfAbsent(topicPartition) { lastOffset }
-            positions.computeIfPresent(topicPartition) { _, _ -> lastOffset }
+            positions.computeIfAbsent(topicPartition) { lastOffset + 1}
+            positions.computeIfPresent(topicPartition) { _, _ -> lastOffset + 1}
         }
         records.map { Record(it, Unit, Unit, Unit, Instant.ofEpochMilli(it.timestamp()), Unit, WithoutTransaction) }.forEach { channel.send(it) }
         if (records.isEmpty) yield()
