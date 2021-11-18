@@ -192,14 +192,17 @@ public class KafkaFlowConsumerWithGroupIdImpl(
 
     private suspend fun fetchAndProcessRecords(channel: Channel<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>) {
         val records = delegateMutex.withLock { delegate.poll(pollDuration) }
-        records.groupBy { TopicPartition(it.topic(), it.partition()) }.forEach { (topicPartition, records) ->
-            val lastOffset = records.last().offset()
-            positions.computeIfAbsent(topicPartition) { lastOffset + 1}
-            positions.computeIfPresent(topicPartition) { _, _ -> lastOffset + 1}
-        }
+
         partitionChangedMessages.forEach { channel.send(it) }
         partitionChangedMessages.clear()
         records.map { Record(it, Unit, Unit, Unit, Instant.ofEpochMilli(it.timestamp()), Unit, WithoutTransaction) }.forEach { channel.send(it) }
+        delegateMutex.withLock {
+            assignment.forEach { topicPartition ->
+                runCatching { delegate.position(topicPartition) }
+                    .onSuccess { positions[topicPartition] = it }
+                    .onFailure { positions.remove(topicPartition) }
+            }
+        }
         if (records.isEmpty) yield()
         if (!records.isEmpty) channel.send(EndOfBatch())
     }
@@ -245,8 +248,6 @@ public class KafkaFlowConsumerWithGroupIdImpl(
     private fun partitionAssigned(assignedPartitions: List<TopicPartition>) {
         assignment = delegate.assignment().toList()
         seek(assignedPartitions)
-        positions.clear()
-        assignment.forEach { positions[it] = delegate.position(it) }
         partitionChangedMessages.add(PartitionsAssigned(assignedPartitions, assignment))
     }
 

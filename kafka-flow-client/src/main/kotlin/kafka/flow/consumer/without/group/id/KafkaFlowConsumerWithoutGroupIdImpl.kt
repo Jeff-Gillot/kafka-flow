@@ -124,12 +124,14 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
 
     private suspend fun fetchAndProcessRecords(channel: Channel<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>) {
         val records = delegateMutex.withLock { delegate.poll(pollDuration) }
-        records.groupBy { TopicPartition(it.topic(), it.partition()) }.forEach { (topicPartition, records) ->
-            val lastOffset = records.last().offset()
-            positions.computeIfAbsent(topicPartition) { lastOffset + 1}
-            positions.computeIfPresent(topicPartition) { _, _ -> lastOffset + 1}
-        }
         records.map { Record(it, Unit, Unit, Unit, Instant.ofEpochMilli(it.timestamp()), Unit, WithoutTransaction) }.forEach { channel.send(it) }
+        delegateMutex.withLock {
+            assignment.forEach { topicPartition ->
+                runCatching { delegate.position(topicPartition) }
+                    .onSuccess { positions[topicPartition] = it }
+                    .onFailure { positions.remove(topicPartition) }
+            }
+        }
         if (records.isEmpty) yield()
         if (!records.isEmpty) channel.send(EndOfBatch())
     }
@@ -150,7 +152,6 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
             delegate.assign(assignment)
             seek()
         }
-        assignment.forEach { positions[it] = delegate.position(it) }
         running = true
         startEndOffsetsRefreshLoop()
     }
