@@ -1,16 +1,19 @@
 package kafka.flow.server.api
 
 import be.delta.flow.time.seconds
+import java.time.Duration
+import java.time.Instant
+import java.util.Properties
 import kafka.flow.TopicDescriptor
-import kafka.flow.consumer.*
+import kafka.flow.consumer.AutoStopPolicy
+import kafka.flow.consumer.KafkaFlowConsumerWithGroupId
+import kafka.flow.consumer.KafkaMessage
+import kafka.flow.consumer.StartOffsetPolicy
 import kafka.flow.consumer.with.group.id.WithTransaction
 import kafka.flow.consumer.with.group.id.WithoutTransaction
 import kafka.flow.utils.allPartitions
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.TopicPartition
-import java.time.Duration
-import java.time.Instant
-import java.util.*
 
 
 public class ConsumerBuilderStep1GroupId<Key, PartitionKey, Value> internal constructor(private val consumerBuilderConfig: ConsumerBuilderConfig<Key, PartitionKey, Value>) {
@@ -65,6 +68,11 @@ public class ConsumerBuilderStep2FromWithoutGroupId<Key, PartitionKey, Value> in
 }
 
 public class ConsumerBuilderStep3AutoStopWithGroupIdAndTransaction<Key, PartitionKey, Value> internal constructor(private val consumerBuilderConfig: ConsumerBuilderConfig<Key, PartitionKey, Value>) {
+    public fun additionalProperty(key: String, value: String): ConsumerBuilderStep3AutoStopWithGroupIdAndTransaction<Key, PartitionKey, Value> {
+        consumerBuilderConfig.clientProperties[key] = value
+        return this
+    }
+
     public fun consumeUntilStopped(): KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit, WithTransaction>> =
         consumer(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.never()))
 
@@ -91,6 +99,7 @@ public class ConsumerBuilderStep3AutoStopWithGroupIdAndTransaction<Key, Partitio
     private fun properties(): Properties {
         val properties = Properties()
         properties.putAll(consumerBuilderConfig.serverProperties)
+        properties.putAll(consumerBuilderConfig.clientProperties)
         properties[ConsumerConfig.GROUP_ID_CONFIG] = consumerBuilderConfig.groupId
         properties[ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG] = "false"
         return properties
@@ -98,6 +107,11 @@ public class ConsumerBuilderStep3AutoStopWithGroupIdAndTransaction<Key, Partitio
 }
 
 public class ConsumerBuilderStep3AutoStopWithGroupIdAndWithoutTransaction<Key, PartitionKey, Value> internal constructor(private val consumerBuilderConfig: ConsumerBuilderConfig<Key, PartitionKey, Value>) {
+    public fun additionalProperty(key: String, value: String): ConsumerBuilderStep3AutoStopWithGroupIdAndWithoutTransaction<Key, PartitionKey, Value> {
+        consumerBuilderConfig.clientProperties[key] = value
+        return this
+    }
+
     public fun consumeUntilStopped(): KafkaFlowConsumerWithGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit, WithoutTransaction>> =
         consumer(consumerBuilderConfig.copy(autoStopPolicy = AutoStopPolicy.never()))
 
@@ -122,6 +136,7 @@ public class ConsumerBuilderStep3AutoStopWithGroupIdAndWithoutTransaction<Key, P
     private fun properties(): Properties {
         val properties = Properties()
         properties.putAll(consumerBuilderConfig.serverProperties)
+        properties.putAll(consumerBuilderConfig.clientProperties)
         properties[ConsumerConfig.GROUP_ID_CONFIG] = consumerBuilderConfig.groupId
         properties[ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG] = "false"
         return properties
@@ -143,6 +158,11 @@ public class ConsumerBuilderStep3AutoStopWithoutGroupId<Key, PartitionKey, Value
 }
 
 public class ConsumerBuilderStep4PartitionsWithoutGroupId<Key, PartitionKey, Value> internal constructor(private val consumerBuilderConfig: ConsumerBuilderConfig<Key, PartitionKey, Value>) {
+    public fun additionalProperty(key: String, value: String): ConsumerBuilderStep4PartitionsWithoutGroupId<Key, PartitionKey, Value> {
+        consumerBuilderConfig.clientProperties[key] = value
+        return this
+    }
+
     public fun readSpecificPartitions(partitions: List<TopicPartition>): kafka.flow.consumer.KafkaFlowConsumerWithoutGroupId<KafkaMessage<Key, PartitionKey, Value?, Unit, WithoutTransaction>> {
         val topics = consumerBuilderConfig.topicDescriptors.associateBy { it.name }
         partitions.firstOrNull { !topics.containsKey(it.topic()) }?.let {
@@ -174,6 +194,7 @@ public class ConsumerBuilderStep4PartitionsWithoutGroupId<Key, PartitionKey, Val
     private fun properties(): Properties {
         val properties = Properties()
         properties.putAll(consumerBuilderConfig.serverProperties)
+        properties.putAll(consumerBuilderConfig.clientProperties)
         properties[ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG] = "false"
         return properties
     }
@@ -187,4 +208,5 @@ public data class ConsumerBuilderConfig<Key, PartitionKey, Value>(
     val groupId: String? = null,
     val maxOpenTransactions: Int? = null,
     val commitInterval: Duration? = null,
+    val clientProperties: HashMap<String, String> = HashMap()
 )
