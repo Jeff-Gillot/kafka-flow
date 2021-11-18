@@ -18,7 +18,10 @@ public class KafkaFlowTopicProducer<Key, PartitionKey, Value>(private val topicD
 
     public suspend fun send(value: Value, transaction: MaybeTransaction) {
         send(value) {
-            it.onFailure { transaction.rollback() }
+            it.onFailure {
+                println("Error while sending record to kafka, rolling back the transaction $transaction for $value")
+                transaction.rollback()
+            }
             it.onSuccess { transaction.unlock() }
         }
     }
@@ -44,7 +47,10 @@ public class KafkaFlowTopicProducer<Key, PartitionKey, Value>(private val topicD
 
     public suspend fun sendTombstone(key: Key, timestamp: Instant, transaction: MaybeTransaction) {
         sendTombstone(key, timestamp) {
-            it.onFailure { transaction.rollback() }
+            it.onFailure {
+                println("Error while sending tombstone to kafka, rolling back the transaction $transaction for $key")
+                transaction.rollback()
+            }
             it.onSuccess { transaction.unlock() }
         }
     }

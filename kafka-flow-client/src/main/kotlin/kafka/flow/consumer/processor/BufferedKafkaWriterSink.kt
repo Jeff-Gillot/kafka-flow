@@ -5,7 +5,6 @@ import kafka.flow.consumer.Record
 import kafka.flow.consumer.with.group.id.MaybeTransaction
 import kafka.flow.producer.KafkaOutput
 import kafka.flow.producer.TopicDescriptorRecord
-import kotlinx.coroutines.flow.FlowCollector
 
 @Suppress("UNCHECKED_CAST")
 public class BufferedKafkaWriterSink<Key, PartitionKey, Value, Transaction : MaybeTransaction> {
@@ -23,11 +22,17 @@ public class BufferedKafkaWriterSink<Key, PartitionKey, Value, Transaction : May
             when (output) {
                 is TopicDescriptorRecord.Record -> output.kafkaServer.on(output.topicDescriptor).send(output.value) { result ->
                     result.onSuccess { records.forEach { it.transaction.unlock() } }
-                    result.onFailure { records.forEach { it.transaction.rollback() } }
+                    result.onFailure {
+                        println("XXX - At least one of the message was not sent triggering rollback")
+                        records.forEach { it.transaction.rollback() }
+                    }
                 }
                 is TopicDescriptorRecord.Tombstone -> output.kafkaServer.on(output.topicDescriptor).sendTombstone(output.key, output.timestamp) { result ->
                     result.onSuccess { records.forEach { it.transaction.unlock() } }
-                    result.onFailure { records.forEach { it.transaction.rollback() } }
+                    result.onFailure {
+                        println("XXX - At least one of the tombstone was not sent triggering rollback")
+                        records.forEach { it.transaction.rollback() }
+                    }
                 }
             }
         }

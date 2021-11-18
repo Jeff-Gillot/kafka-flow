@@ -4,14 +4,14 @@ import org.apache.kafka.common.TopicPartition
 
 public sealed interface MaybeTransaction {
     public suspend fun lock()
-    public suspend fun unlock()
-    public suspend fun rollback()
+    public fun unlock()
+    public fun rollback()
 }
 
 public object WithoutTransaction : MaybeTransaction {
     override suspend fun lock() {}
-    override suspend fun unlock() {}
-    override suspend fun rollback() {}
+    override fun unlock() {}
+    override fun rollback() {}
 }
 
 public class WithTransaction(
@@ -23,11 +23,11 @@ public class WithTransaction(
         transactionManager.increaseTransaction(topicPartition, offset)
     }
 
-    public override suspend fun unlock() {
+    public override fun unlock() {
         transactionManager.decreaseTransaction(topicPartition, offset)
     }
 
-    public override suspend fun rollback() {
+    public override fun rollback() {
         transactionManager.markRollback(topicPartition)
     }
 
