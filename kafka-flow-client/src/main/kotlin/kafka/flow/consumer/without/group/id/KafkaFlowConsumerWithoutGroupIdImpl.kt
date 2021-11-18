@@ -2,25 +2,39 @@ package kafka.flow.consumer.without.group.id
 
 import be.delta.flow.time.milliseconds
 import be.delta.flow.time.seconds
-import kafka.flow.consumer.*
+import java.time.Instant
+import java.util.Properties
+import java.util.concurrent.ConcurrentHashMap
+import kafka.flow.consumer.AutoStopPolicy
+import kafka.flow.consumer.EndOfBatch
+import kafka.flow.consumer.KafkaFlowConsumerWithoutGroupId
+import kafka.flow.consumer.KafkaMessage
+import kafka.flow.consumer.PartitionsAssigned
+import kafka.flow.consumer.Record
+import kafka.flow.consumer.StartConsuming
+import kafka.flow.consumer.StartOffsetPolicy
+import kafka.flow.consumer.StopConsuming
 import kafka.flow.consumer.with.group.id.WithoutTransaction
 import kafka.flow.utils.logger
-import kotlinx.coroutines.*
+import kotlin.coroutines.EmptyCoroutineContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.consumeAsFlow
 import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.yield
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
-import java.time.Instant
-import java.util.*
-import java.util.concurrent.ConcurrentHashMap
-import kotlin.coroutines.EmptyCoroutineContext
 
 public class KafkaFlowConsumerWithoutGroupIdImpl(
     clientProperties: Properties,
@@ -68,12 +82,16 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
         val lags = assignment.map {
             val endOffset = endOffsets[it]
             val position = positions[it]
+            println("end $endOffset - position $position")
             if (position != null && endOffset != null) {
-                (endOffset - position).coerceAtLeast(0)
+                (endOffset - (position + 1)).coerceAtLeast(0)
+            } else if (endOffset == 0L) {
+                0
             } else {
                 null
             }
         }
+        println(lags)
         if (lags.contains(null)) return null
         return lags.filterNotNull().sum()
     }
