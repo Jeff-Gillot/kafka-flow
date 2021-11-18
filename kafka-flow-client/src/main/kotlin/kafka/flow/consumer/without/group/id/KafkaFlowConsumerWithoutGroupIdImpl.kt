@@ -19,6 +19,7 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import java.time.Instant
 import java.util.*
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.EmptyCoroutineContext
 
 public class KafkaFlowConsumerWithoutGroupIdImpl(
@@ -36,6 +37,7 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
     private var endOffsets: Map<TopicPartition, Long> = emptyMap()
     private val delegateMutex = Mutex()
     private val pollDuration = 10.milliseconds()
+    private val positions = ConcurrentHashMap<TopicPartition, Long>()
 
     init {
         require(clientProperties[ConsumerConfig.GROUP_ID_CONFIG] == null) { "${ConsumerConfig.GROUP_ID_CONFIG} must NOT be set" }
@@ -60,12 +62,20 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
 
     override suspend fun lag(): Long? {
         if (!isRunning()) return null
-        return delegateMutex.withLock {
-            if (assignment.isEmpty()) return 0
-            if (assignment.size != endOffsets.size) return null
-            if (!endOffsets.keys.containsAll(assignment)) return null
-            endOffsets.map { it.value - delegate.position(it.key) }.sumOf { it.coerceAtLeast(0) }
+        if (assignment.isEmpty()) return 0
+        if (assignment.size != endOffsets.size) return null
+        if (!endOffsets.keys.containsAll(assignment)) return null
+        val lags = assignment.map {
+            val endOffset = endOffsets[it]
+            val position = positions[it]
+            if (position != null && endOffset != null) {
+                (endOffset - position).coerceAtLeast(0)
+            } else {
+                null
+            }
         }
+        if (lags.contains(null)) return null
+        return lags.filterNotNull().sum()
     }
 
     override fun stop() {
@@ -98,6 +108,11 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
 
     private suspend fun fetchAndProcessRecords(channel: Channel<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>) {
         val records = delegateMutex.withLock { delegate.poll(pollDuration) }
+        records.groupBy { TopicPartition(it.topic(), it.partition()) }.forEach { (topicPartition, records) ->
+            val lastOffset = records.last().offset()
+            positions.computeIfAbsent(topicPartition) { lastOffset }
+            positions.computeIfPresent(topicPartition) { _, _ -> lastOffset }
+        }
         records.map { Record(it, Unit, Unit, Unit, Instant.ofEpochMilli(it.timestamp()), Unit, WithoutTransaction) }.forEach { channel.send(it) }
         if (records.isEmpty) yield()
         if (!records.isEmpty) channel.send(EndOfBatch())

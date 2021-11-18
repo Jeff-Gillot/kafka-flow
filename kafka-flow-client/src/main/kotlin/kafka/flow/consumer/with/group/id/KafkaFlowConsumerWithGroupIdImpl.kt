@@ -4,6 +4,7 @@ import be.delta.flow.time.milliseconds
 import be.delta.flow.time.seconds
 import java.time.Instant
 import java.util.Properties
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kafka.flow.consumer.AutoStopPolicy
 import kafka.flow.consumer.EndOfBatch
@@ -56,6 +57,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
     private val partitionChangedMessages = mutableListOf<PartitionChangedMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>()
     private val delegateMutex = Mutex()
     private val pollDuration = 10.milliseconds()
+    private val positions = ConcurrentHashMap<TopicPartition, Long>()
 
     init {
         requireNotNull(clientProperties[ConsumerConfig.GROUP_ID_CONFIG]) { "${ConsumerConfig.GROUP_ID_CONFIG} must be set" }
@@ -83,11 +85,17 @@ public class KafkaFlowConsumerWithGroupIdImpl(
         if (assignment.isEmpty()) return 0
         if (assignment.size != endOffsets.size) return null
         if (!endOffsets.keys.containsAll(assignment)) return null
-        return delegateMutex.withLock {
-            runCatching {
-                endOffsets.map { it.value - delegate.position(it.key) }.sumOf { it.coerceAtLeast(0) }
-            }.getOrDefault(null)
+        val lags = assignment.map {
+            val endOffset = endOffsets[it]
+            val position = positions[it]
+            if (position != null && endOffset != null) {
+                (endOffset - position).coerceAtLeast(0)
+            } else {
+                null
+            }
         }
+        if (lags.contains(null)) return null
+        return lags.filterNotNull().sum()
     }
 
     override fun stop() {
@@ -182,6 +190,11 @@ public class KafkaFlowConsumerWithGroupIdImpl(
 
     private suspend fun fetchAndProcessRecords(channel: Channel<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>) {
         val records = delegateMutex.withLock { delegate.poll(pollDuration) }
+        records.groupBy { TopicPartition(it.topic(), it.partition()) }.forEach { (topicPartition, records) ->
+            val lastOffset = records.last().offset()
+            positions.computeIfAbsent(topicPartition) { lastOffset }
+            positions.computeIfPresent(topicPartition) { _, _ -> lastOffset }
+        }
         partitionChangedMessages.forEach { channel.send(it) }
         partitionChangedMessages.clear()
         records.map { Record(it, Unit, Unit, Unit, Instant.ofEpochMilli(it.timestamp()), Unit, WithoutTransaction) }.forEach { channel.send(it) }
