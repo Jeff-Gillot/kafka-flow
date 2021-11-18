@@ -82,7 +82,6 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
         val lags = assignment.map {
             val endOffset = endOffsets[it]
             val position = positions[it]
-            println("end $endOffset - position $position")
             if (position != null && endOffset != null) {
                 (endOffset - (position + 1)).coerceAtLeast(0)
             } else if (endOffset == 0L) {
@@ -91,7 +90,6 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
                 null
             }
         }
-        println(lags)
         if (lags.contains(null)) return null
         return lags.filterNotNull().sum()
     }
