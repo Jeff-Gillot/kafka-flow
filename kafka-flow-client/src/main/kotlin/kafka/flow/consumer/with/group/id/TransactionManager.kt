@@ -29,7 +29,7 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
                 println("Too many transactions open, unable to create a transaction for $topicPartition@$offset, waiting until a slot is available")
                 logTime = Instant.now() + 10.seconds()
             }
-            delay(1)
+            delay(10)
         }
     }
 

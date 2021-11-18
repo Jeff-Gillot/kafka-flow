@@ -22,7 +22,7 @@ public class BufferProcessor<Key, Partition, Value, Transaction : MaybeTransacti
 
     public suspend fun start(input: Flow<KafkaMessage<Key, Partition, Value, Unit, Transaction>>): Flow<List<KafkaMessage<Key, Partition, Value, Unit, Transaction>>> {
         val timerJob = CoroutineScope(currentCoroutineContext()).launch {
-            while (true) {
+            while (isActive) {
                 do {
                     val timeToWait = Duration.between(Instant.now(), lastBatchTime + timeSpan)
                     if (timeToWait > Duration.ZERO) {

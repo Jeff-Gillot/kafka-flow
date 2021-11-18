@@ -51,7 +51,7 @@ public class GroupingProcessor<Key, PartitionKey, Value, Output, Transaction : M
 
         processorTimeoutLoop = CoroutineScope(currentCoroutineContext()).launch {
             while (true) {
-                delay(1.seconds().toMillis())
+                delay(10.seconds().toMillis())
                 val processorsToRemove = processorLastMessage
                     .filterValues { it < Instant.now() - processorTimeout }
                     .keys
