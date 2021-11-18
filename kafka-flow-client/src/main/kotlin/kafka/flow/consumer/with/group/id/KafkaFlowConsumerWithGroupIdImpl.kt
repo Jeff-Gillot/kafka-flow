@@ -146,7 +146,11 @@ public class KafkaFlowConsumerWithGroupIdImpl(
     }
 
     override suspend fun rollback(topicPartitionToRollback: Set<TopicPartition>) {
-        if (topicPartitionToRollback.isEmpty()) return
+        if (topicPartitionToRollback.isEmpty()) {
+            println("XXX - Nothing to rollback")
+            return
+        }
+        println("XXX - Rolling back $topicPartitionToRollback")
         delegateMutex.withLock {
             check(isRunning()) { "Cannot rollback transaction when the consumer isn't running" }
             val committedOffsets = delegate.committed(topicPartitionToRollback)
@@ -154,6 +158,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
                 delegate.seek(topicPartition, committedOffsets[topicPartition]?.offset() ?: 0)
             }
         }
+        println("XXX - Done rolling back $topicPartitionToRollback")
     }
 
     private suspend fun createConsumerChannel(): Channel<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>> {
