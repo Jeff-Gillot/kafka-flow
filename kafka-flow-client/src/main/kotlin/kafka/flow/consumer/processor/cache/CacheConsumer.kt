@@ -30,8 +30,8 @@ public class CacheConsumer<Key, PartitionKey, Value>(
 
     override fun stop(): Unit = delegate.stop()
     override fun isRunning(): Boolean = delegate.isRunning()
-    override suspend fun isUpToDate(): Boolean = delegate.isRunning()
-    override suspend fun lag(): Long? = delegate.lag()
+    override fun isUpToDate(): Boolean = delegate.isRunning()
+    override fun lag(): Long? = delegate.lag()
 
     override suspend fun get(key: Key): Value? = cache.get(key)
     override suspend fun keys(): List<Key> = cache.keys()

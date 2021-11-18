@@ -25,7 +25,7 @@ public class KafkaFlowConsumerWithoutGroupId<Key, PartitionKey, Value>(
 
     override fun stop(): Unit = delegate.stop()
     override fun isRunning(): Boolean = delegate.isRunning()
-    override suspend fun isUpToDate(): Boolean = delegate.isUpToDate()
-    override suspend fun lag(): Long? = delegate.lag()
+    override fun isUpToDate(): Boolean = delegate.isUpToDate()
+    override fun lag(): Long? = delegate.lag()
     override fun close(): Unit = delegate.close()
 }

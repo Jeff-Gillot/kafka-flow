@@ -72,7 +72,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
 
     override fun isRunning(): Boolean = running
 
-    override suspend fun isUpToDate(): Boolean {
+    override fun isUpToDate(): Boolean {
         if (stopRequested) return false
         if (!running) return false
         val lag = lag()
@@ -80,7 +80,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
         return true
     }
 
-    override suspend fun lag(): Long? {
+    override fun lag(): Long? {
         if (!isRunning()) return null
         if (assignment.isEmpty()) return 0
         if (assignment.size != endOffsets.size) return null
@@ -202,7 +202,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
         if (!records.isEmpty) channel.send(EndOfBatch())
     }
 
-    private suspend fun shouldStop(): Boolean {
+    private fun shouldStop(): Boolean {
         if (stopRequested) return true
         return when (autoStopPolicy) {
             AutoStopPolicy.Never -> return false

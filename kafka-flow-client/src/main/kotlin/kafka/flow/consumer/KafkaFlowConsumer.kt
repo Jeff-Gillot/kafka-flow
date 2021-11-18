@@ -11,8 +11,8 @@ public interface KafkaFlowConsumer<ConsumerOutput> {
     public fun stop()
 
     public fun isRunning(): Boolean
-    public suspend fun isUpToDate(): Boolean
-    public suspend fun lag(): Long?
+    public fun isUpToDate(): Boolean
+    public fun lag(): Long?
 
     public suspend fun waitUntilUpToDate() {
         while (isRunning() && !isUpToDate()) delay(10)
