@@ -26,7 +26,7 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
         var logTime = Instant.now() + 10.seconds()
         while (openedTransactionCount.get() >= maxOpenTransactions) {
             if (logTime < Instant.now()) {
-                println("Too many transactions open, unable to create a transaction for $topicPartition@$offset, waiting until a slot is available")
+                logger.warn("Too many transactions open, unable to create a transaction for $topicPartition@$offset, waiting until a slot is available")
                 logTime = Instant.now() + 10.seconds()
             }
             delay(10)
@@ -48,10 +48,7 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
 
     public suspend fun rollbackAndCommit(client: KafkaFlowConsumerWithGroupId<*>) {
         client.rollback(getPartitionsToRollback())
-        val offsets = getOffsetsToCommit()
-        println("XXX - Committing $offsets")
-        client.commit(offsets)
-        println("XXX - Commit done $offsets")
+        client.commit(getOffsetsToCommit())
     }
 
     private fun getOffsetsToCommit(): Map<TopicPartition, OffsetAndMetadata> {

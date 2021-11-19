@@ -96,7 +96,6 @@ public class KafkaFlowConsumerWithGroupIdImpl(
                 it to null
             }
         }.toMap()
-        println("lags: $lags")
         if (lags.values.contains(null)) return null
         return lags.values.filterNotNull().sum()
     }
@@ -110,11 +109,8 @@ public class KafkaFlowConsumerWithGroupIdImpl(
     }
 
     override suspend fun commit(commitOffsets: Map<TopicPartition, OffsetAndMetadata>) {
-        if (commitOffsets.isEmpty()) {
-            println("XXX - Nothing to commit")
-            return
-        }
-        val result = retryUntilSuccess {
+        if (commitOffsets.isEmpty()) return
+        retryUntilSuccess {
             var result: Result<Unit> = Result.success(Unit)
             val mutex = Mutex(true)
             delegateMutex.withLock {
@@ -124,18 +120,15 @@ public class KafkaFlowConsumerWithGroupIdImpl(
                     } else {
                         delegate.commitAsync(commitOffsets) { offsets, exception ->
                             result = if (exception != null) {
-                                println("XXX - Error during commit ${exception.message}")
-                                logger.warn("Error while committing offsets ($offsets)", exception)
+                                logger.warn("Error while committing offsets ($offsets), the system will retry", exception)
                                 Result.failure(exception)
                             } else {
-                                println("XXX - Commit ok $offsets")
                                 Result.success(Unit)
                             }
                         }
                     }
                 } catch (throwable: Throwable) {
-                    println("XXX - Error during commit ${throwable.message}")
-                    throwable.printStackTrace()
+                    logger.warn("Error while committing offsets ($commitOffsets), the system will retry", throwable)
                     result = Result.failure(throwable)
                 } finally {
                     mutex.unlock()
@@ -144,7 +137,6 @@ public class KafkaFlowConsumerWithGroupIdImpl(
             mutex.lock()
             result
         }
-        println("Commit result $result")
     }
 
     private suspend fun <T> retryUntilSuccess(block: suspend () -> Result<T>): T {
@@ -157,11 +149,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
     }
 
     override suspend fun rollback(topicPartitionToRollback: Set<TopicPartition>) {
-        if (topicPartitionToRollback.isEmpty()) {
-            println("XXX - Nothing to rollback")
-            return
-        }
-        println("XXX - Rolling back $topicPartitionToRollback")
+        if (topicPartitionToRollback.isEmpty()) return
         delegateMutex.withLock {
             check(isRunning()) { "Cannot rollback transaction when the consumer isn't running" }
             val committedOffsets = delegate.committed(topicPartitionToRollback)
@@ -169,7 +157,6 @@ public class KafkaFlowConsumerWithGroupIdImpl(
                 delegate.seek(topicPartition, committedOffsets[topicPartition]?.offset() ?: 0)
             }
         }
-        println("XXX - Done rolling back $topicPartitionToRollback")
     }
 
     private suspend fun createConsumerChannel(): Channel<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>> {
