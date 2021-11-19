@@ -96,6 +96,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
                 null
             }
         }
+        println(lags)
         if (lags.contains(null)) return null
         return lags.filterNotNull().sum()
     }
