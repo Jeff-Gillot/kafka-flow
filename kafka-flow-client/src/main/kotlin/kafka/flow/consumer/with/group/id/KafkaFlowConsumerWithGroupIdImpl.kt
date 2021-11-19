@@ -85,20 +85,20 @@ public class KafkaFlowConsumerWithGroupIdImpl(
         if (assignment.isEmpty()) return 0
         if (assignment.size != endOffsets.size) return null
         if (!endOffsets.keys.containsAll(assignment)) return null
-        val lags = assignment.map {
+        val lags: Map<TopicPartition, Long?> = assignment.map {
             val endOffset = endOffsets[it]
             val position = positions[it]
             if (position != null && endOffset != null) {
-                (endOffset - position).coerceAtLeast(0)
+                it to (endOffset - position).coerceAtLeast(0)
             } else if (endOffset == 0L) {
-                0
+                it to 0L
             } else {
-                null
+                it to null
             }
-        }
-        println(lags)
-        if (lags.contains(null)) return null
-        return lags.filterNotNull().sum()
+        }.toMap()
+        println("lags: $lags")
+        if (lags.values.contains(null)) return null
+        return lags.values.filterNotNull().sum()
     }
 
     override fun stop() {
