@@ -99,11 +99,7 @@ public class KafkaMetricLogger(private val name: String) {
             }
             when (_outputMeters.size) {
                 0 -> {
-                    if (_inputMeters.size > 1) {
-                        append("\r\t")
-                    } else {
-                        append(", ")
-                    }
+                    if (_inputMeters.size > 1) append("\r\t") else append(", ")
                     append("No output yet")
                 }
                 else -> {
