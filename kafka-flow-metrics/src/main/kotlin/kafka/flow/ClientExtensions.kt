@@ -1,8 +1,9 @@
 @file:Suppress("UNCHECKED_CAST")
 
-package kafka.flow.consumer
+package kafka.flow
 
-import kafka.flow.KafkaMetricLogger
+import kafka.flow.consumer.KafkaMessage
+import kafka.flow.consumer.Record
 import kafka.flow.consumer.with.group.id.MaybeTransaction
 import kafka.flow.producer.KafkaOutput
 import kotlin.system.measureNanoTime
