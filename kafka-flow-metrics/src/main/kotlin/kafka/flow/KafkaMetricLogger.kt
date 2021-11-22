@@ -9,14 +9,18 @@ import java.text.DecimalFormat
 import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 import kafka.flow.consumer.KafkaFlowConsumer
+import kafka.flow.consumer.KafkaMessage
 import kafka.flow.consumer.Record
 import kafka.flow.consumer.with.group.id.MaybeTransaction
 import kafka.flow.producer.KafkaOutput
 import kafka.flow.utils.logger
 import kotlin.coroutines.EmptyCoroutineContext
+import kotlin.system.measureNanoTime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -131,7 +135,58 @@ public class KafkaMetricLogger(private val name: String) {
         }
     }
 
-    private companion object {
-        private val formatter = DecimalFormat("0.00");
+    public companion object {
+        private val formatter = DecimalFormat("0.00")
+
+
+        public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<List<KafkaMessage<Key, Partition, Value, Unit, Transaction>>>.mapValuesToOutput(
+            kafkaMetricLogger: KafkaMetricLogger,
+            block: suspend (List<Pair<Key, Value>>) -> Output
+        ): Flow<Pair<List<KafkaMessage<Key, Partition, Value, Unit, Transaction>>, Output>> {
+            return map { messages ->
+                val records = messages.filterIsInstance<Record<Key, Partition, Value, Unit, Transaction>>()
+                val keyValues = records.map { it.key to it.value }
+
+                var result: Output
+                val time = measureNanoTime {
+                    result = block.invoke(keyValues)
+                }
+
+                kafkaMetricLogger.registerInput(records, time)
+
+                val output = result
+                if (output is KafkaOutput) {
+                    kafkaMetricLogger.registerOutput(output)
+                }
+
+                messages to output
+            }
+        }
+
+        @Suppress("UNCHECKED_CAST")
+        public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<KafkaMessage<Key, Partition, Value, Unit, Transaction>>.mapValueToOutput(
+            kafkaMetricLogger: KafkaMetricLogger,
+            block: suspend (Key, Value) -> Output
+        ): Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>> {
+            return map { record ->
+                if (record is Record) {
+                    var result: Output
+                    val time = measureNanoTime {
+                        result = block.invoke(record.key, record.value)
+                    }
+
+                    kafkaMetricLogger.registerInput(record, time)
+
+                    val output = result
+                    if (output is KafkaOutput) {
+                        kafkaMetricLogger.registerOutput(output)
+                    }
+
+                    Record(record.consumerRecord, record.key, record.partitionKey, record.value, record.timestamp, output, record.transaction)
+                } else {
+                    record as KafkaMessage<Key, Partition, Value, Output, Transaction>
+                }
+            }
+        }
     }
 }
