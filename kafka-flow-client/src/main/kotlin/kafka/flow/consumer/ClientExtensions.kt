@@ -2,16 +2,38 @@
 
 package kafka.flow.consumer
 
+import be.delta.flow.time.milliseconds
 import be.delta.flow.time.seconds
+import java.time.Duration
+import java.time.Instant
 import kafka.flow.TopicDescriptor
-import kafka.flow.consumer.processor.*
+import kafka.flow.consumer.processor.BufferProcessor
+import kafka.flow.consumer.processor.BufferedKafkaWriterSink
+import kafka.flow.consumer.processor.GroupingProcessor
+import kafka.flow.consumer.processor.KafkaWriterSink
+import kafka.flow.consumer.processor.Sink
+import kafka.flow.consumer.processor.TopicDescriptorDeserializerProcessor
+import kafka.flow.consumer.processor.TransactionProcessor
+import kafka.flow.consumer.processor.TransformProcessor
 import kafka.flow.consumer.with.group.id.MaybeTransaction
 import kafka.flow.consumer.with.group.id.WithTransaction
 import kafka.flow.consumer.with.group.id.WithoutTransaction
 import kafka.flow.producer.KafkaOutput
-import kotlinx.coroutines.flow.*
+import kafka.flow.producer.KafkaOutputRecord
+import kafka.flow.utils.FlowDebouncer
+import kafka.flow.utils.FlowDebouncer.Companion.debounce
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.flatMapConcat
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.onEach
 import org.apache.kafka.common.TopicPartition
-import java.time.Duration
 
 public suspend fun <Key, Partition, Value, Output> Flow<KafkaMessage<Key, Partition, Value, Output, WithoutTransaction>>.collectValues(block: suspend (Value) -> Unit) {
     this.collect {
@@ -165,7 +187,7 @@ public fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<
     return filter { message ->
         if (message is Record) {
             val result = message.value != null
-            if(!result) message.transaction.unlock()
+            if (!result) message.transaction.unlock()
             result
         } else {
             true
@@ -277,3 +299,73 @@ public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransactio
     }
 }
 
+public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>>.debounceInputOnKey(
+    timeProvider: (Record<Key, Partition, Value, Output, Transaction>, Instant?) -> Instant?,
+    maxDebounceDuration: Duration,
+    interval: Duration = 10.milliseconds(),
+    cleanUpInterval: Duration = 10.seconds(),
+): Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>> {
+    return debounce(
+        { message -> if (message is Record<Key, Partition, Value, Output, Transaction>) Pair(message.consumerRecord.topic(), message.key) else null },
+        { message, instant -> if (message is Record<Key, Partition, Value, Output, Transaction>) timeProvider.invoke(message, instant) else null },
+        maxDebounceDuration,
+        interval,
+        cleanUpInterval
+    ).filterSkipActionsAndCommit()
+}
+
+private fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<FlowDebouncer.Action<KafkaMessage<Key, Partition, Value, Output, Transaction>>>.filterSkipActionsAndCommit():
+        Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>> {
+    return mapNotNull { action ->
+        if (action is FlowDebouncer.Skip<KafkaMessage<Key, Partition, Value, Output, Transaction>>) {
+            if (action.data is Record<Key, Partition, Value, Output, Transaction>) {
+                (action.data as Record<Key, Partition, Value, Output, Transaction>).transaction.unlock()
+            }
+            null
+        } else {
+            action.data
+        }
+    }
+}
+
+@FlowPreview
+public suspend fun <Key, Partition, Value, Transaction : MaybeTransaction> Flow<KafkaMessage<Key, Partition, Value, KafkaOutput, Transaction>>.debounceOutputOnKey(
+    timeProvider: (KafkaOutputRecord, Instant?) -> Instant?,
+    maxDebounceDuration: Duration,
+    interval: Duration = 10.milliseconds(),
+    cleanUpInterval: Duration = 10.seconds(),
+): Flow<KafkaMessage<Key, Partition, Value, KafkaOutput, Transaction>> {
+    return splitMultipleOutputToSingleMessages()
+        .debounce(
+            { message -> message.getSingleOutputRecordOrNull()?.let { Pair(it.topicDescriptor.name, it.key) } },
+            { message, instant -> message.getSingleOutputRecordOrNull()?.let { timeProvider.invoke(it, instant) } },
+            maxDebounceDuration,
+            interval,
+            cleanUpInterval
+        ).filterSkipActionsAndCommit()
+}
+
+@FlowPreview
+private fun <Key, Partition, Transaction : MaybeTransaction, Value> Flow<KafkaMessage<Key, Partition, Value, KafkaOutput, Transaction>>.splitMultipleOutputToSingleMessages() =
+    flatMapConcat { message ->
+        if (message is Record<Key, Partition, Value, KafkaOutput, Transaction> && message.output.records.isNotEmpty()) {
+            val messages = message.output.records.map { outputRecord ->
+                message.transaction.lock()
+                Record(message.consumerRecord, message.key, message.partitionKey, message.value, message.timestamp, KafkaOutput(listOf(outputRecord)), message.transaction)
+            }
+
+            message.transaction.unlock()
+            messages.asFlow()
+        } else {
+            listOf(message).asFlow()
+        }
+    }
+
+private fun <Key, Partition, Value, Transaction : MaybeTransaction> KafkaMessage<Key, Partition, Value, KafkaOutput, Transaction>.getSingleOutputRecordOrNull(): KafkaOutputRecord? {
+    return if (this is Record && output.records.isNotEmpty()) {
+        require(output.records.size == 1) { "This should only be used if there is at max 1 record in the output, please use splitMultipleOutputToSingleMessages before this function" }
+        output.records.first()
+    } else {
+        null
+    }
+}

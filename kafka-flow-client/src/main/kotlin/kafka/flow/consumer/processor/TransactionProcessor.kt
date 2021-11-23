@@ -68,7 +68,7 @@ public class TransactionProcessor<Key, PartitionKey, Value, Output>(
                     }
                 }
             } finally {
-                logger.error("Exiting the commit loop")
+                logger.warn("Commit manager is stopping")
             }
         }
     }
