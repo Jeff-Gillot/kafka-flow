@@ -1,18 +1,22 @@
 package kafka.flow
 
 import be.delta.flow.time.millisecond
+import be.delta.flow.time.milliseconds
 import be.delta.flow.time.nanoseconds
 import be.delta.flow.time.seconds
 import com.codahale.metrics.Meter
 import com.codahale.metrics.Timer
 import java.text.DecimalFormat
 import java.time.Duration
+import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import kafka.flow.consumer.KafkaFlowConsumer
 import kafka.flow.consumer.KafkaMessage
 import kafka.flow.consumer.Record
 import kafka.flow.consumer.with.group.id.MaybeTransaction
 import kafka.flow.producer.KafkaOutput
+import kafka.flow.utils.FlowDebouncer
+import kafka.flow.utils.FlowDebouncer.Companion.debounce
 import kafka.flow.utils.logger
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.system.measureNanoTime
@@ -21,6 +25,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -28,11 +33,13 @@ import kotlinx.coroutines.launch
 public class KafkaMetricLogger(private val name: String) {
     private val _inputMeters = ConcurrentHashMap<String, Meter>()
     private val _outputMeters = ConcurrentHashMap<String, Meter>()
+    private val _skippedMeters = ConcurrentHashMap<String, Meter>()
     private val _timers = ConcurrentHashMap<String, Timer>()
     private val logger = logger()
 
     public val inputMeters: Map<String, Meter> = _inputMeters
     public val outputMeters: Map<String, Meter> = _outputMeters
+    public val skippedMeters: Map<String, Meter> = _skippedMeters
     public val timers: Map<String, Timer> = _timers
 
     public fun start(consumer: KafkaFlowConsumer<*>, interval: Duration = 30.seconds(), printBlock: (KafkaMetricLogger) -> Unit) {
@@ -58,6 +65,12 @@ public class KafkaMetricLogger(private val name: String) {
         _timers
             .computeIfAbsent(record.consumerRecord.topic()) { Timer() }
             .update(time.nanoseconds())
+    }
+
+    public fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> registerSkip(record: Record<Key, Partition, Value, Output, Transaction>) {
+        _skippedMeters
+            .computeIfAbsent(record.consumerRecord.topic()) { Meter() }
+            .mark()
     }
 
     public fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> registerInput(records: List<Record<Key, Partition, Value, Output, Transaction>>, time: Long) {
@@ -116,6 +129,14 @@ public class KafkaMetricLogger(private val name: String) {
                         )
                     }
                 }
+            }
+            _skippedMeters.forEach { (key, value) ->
+                append(
+                    "\r\tSKIPPED $key -> " +
+                            "${value.count.formatBigNumber()}, " +
+                            "1 min ${value.oneMinuteRate.formatted()}/s, " +
+                            "15 min ${value.fifteenMinuteRate.formatted()}/s"
+                )
             }
         }
 
@@ -185,6 +206,33 @@ public class KafkaMetricLogger(private val name: String) {
                     Record(record.consumerRecord, record.key, record.partitionKey, record.value, record.timestamp, output, record.transaction)
                 } else {
                     record as KafkaMessage<Key, Partition, Value, Output, Transaction>
+                }
+            }
+        }
+
+        public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>>.debounceInputOnKey(
+            kafkaMetricLogger: KafkaMetricLogger,
+            timeProvider: (Record<Key, Partition, Value, Output, Transaction>, Instant?) -> Instant?,
+            maxDebounceDuration: Duration,
+            interval: Duration = 10.milliseconds(),
+            cleanUpInterval: Duration = 10.seconds(),
+        ): Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>> {
+            return debounce(
+                { message -> if (message is Record<Key, Partition, Value, Output, Transaction>) Pair(message.consumerRecord.topic(), message.key) else null },
+                { message, instant -> if (message is Record<Key, Partition, Value, Output, Transaction>) timeProvider.invoke(message, instant) else null },
+                maxDebounceDuration,
+                interval,
+                cleanUpInterval
+            ).mapNotNull { action ->
+                if (action is FlowDebouncer.Skip<KafkaMessage<Key, Partition, Value, Output, Transaction>>) {
+                    if (action.data is Record<Key, Partition, Value, Output, Transaction>) {
+                        val record = action.data as Record<Key, Partition, Value, Output, Transaction>
+                        record.transaction.unlock()
+                        kafkaMetricLogger.registerSkip(record)
+                    }
+                    null
+                } else {
+                    action.data
                 }
             }
         }
