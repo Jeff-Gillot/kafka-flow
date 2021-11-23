@@ -128,7 +128,7 @@ public class FlowDebouncer<Input, Key> {
             outputLoop?.cancel()
             cleanupLoop?.cancel()
             CoroutineScope(coroutineContext).launch {
-                launch {
+                val finalJob = launch {
                     try {
                         delay(10000)
                         currentCoroutineContext().cancelChildren()
@@ -140,6 +140,7 @@ public class FlowDebouncer<Input, Key> {
                     values.values.forEach {
                         outputChannel.send(Process(it))
                     }
+                    finalJob.cancel()
                 }
             }
         }

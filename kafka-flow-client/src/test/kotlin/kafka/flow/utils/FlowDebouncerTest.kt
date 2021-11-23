@@ -115,6 +115,22 @@ class FlowDebouncerTest {
         }
     }
 
+    @Test
+    fun `three in, second and third are debounced`() = run {
+        val flow = flow {
+            emit("a" to 1)
+            emit("a" to 2)
+            emit("a" to 3)
+        }
+
+        val result = flow
+            .debounceAndIgnoreSkip({ it.first }, { _, lastDebounceTime -> lastDebounceTime?.plusMillis(100) }, 10.milliseconds())
+            .toList()
+
+        expectThat(result).containsExactly("a" to 1, "a" to 3)
+
+    }
+
     private fun run(block: suspend () -> Unit) {
         runBlocking {
             block.invoke()
