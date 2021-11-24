@@ -68,6 +68,10 @@ public class KafkaMetricLogger(private val name: String) {
     }
 
     public fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> registerSkip(record: Record<Key, Partition, Value, Output, Transaction>) {
+        _inputMeters
+            .computeIfAbsent(record.consumerRecord.topic()) { Meter() }
+            .mark()
+
         _skippedMeters
             .computeIfAbsent(record.consumerRecord.topic()) { Meter() }
             .mark()

@@ -13,11 +13,8 @@ public class BufferedKafkaWriterSink<Key, PartitionKey, Value, Transaction : May
         val records = value.first.filterIsInstance<Record<Key, PartitionKey, Value, Unit, Transaction>>()
         val outputs = value.second
 
-        records.forEach { record ->
-            repeat(outputs.records.size) { record.transaction.lock() }
-        }
-
         outputs.records.forEach { outputRecord ->
+            records.forEach { it.transaction.lock() }
             val output: TopicDescriptorRecord<Any, Any, Any> = outputRecord as TopicDescriptorRecord<Any, Any, Any>
             when (output) {
                 is TopicDescriptorRecord.Record -> output.kafkaServer.on(output.topicDescriptor).send(output.value) { result ->

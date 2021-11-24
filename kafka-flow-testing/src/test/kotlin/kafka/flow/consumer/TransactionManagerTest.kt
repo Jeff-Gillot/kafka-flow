@@ -1,11 +1,9 @@
 package kafka.flow.consumer
 
 import kafka.flow.consumer.with.group.id.TransactionManager
-import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
 import org.junit.Test
 import strikt.api.expectThat
-import strikt.assertions.containsExactly
 import strikt.assertions.containsKey
 import strikt.assertions.containsKeys
 import strikt.assertions.hasSize
