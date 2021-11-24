@@ -8,7 +8,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -17,7 +16,6 @@ import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -26,6 +24,7 @@ public class FlowDebouncer<Input, Key> {
     private val mutex = Mutex()
     private val keyTime = HashMap<Key, Instant>()
     private val values = HashMap<Key, Input>()
+    private val lastSentTime = HashMap<Key, Instant>()
     private var outputLoop: Job? = null
     private var cleanupLoop: Job? = null
 
@@ -54,7 +53,10 @@ public class FlowDebouncer<Input, Key> {
             val durationInMs = interval.toMillis()
             while (isActive) {
                 delay(durationInMs)
-                getItemToSend().forEach { outputChannel.send(Process(it)) }
+                getItemToSend().forEach {
+                    lastSentTime[it.key] = Instant.now()
+                    outputChannel.send(Process(it.value))
+                }
             }
         }
     }
@@ -72,23 +74,23 @@ public class FlowDebouncer<Input, Key> {
         }
     }
 
-    private suspend fun getItemToSend(): List<Input> = mutex.withLock {
+    private suspend fun getItemToSend(): Map<Key, Input> = mutex.withLock {
         keyTime
             .filter { (_, value) -> value < Instant.now() }
             .keys
-            .mapNotNull { key -> values.remove(key) }
-
+            .associateWith { key ->
+                keyTime.remove(key)
+                values.remove(key)
+            }
+            .filterValues { it != null }
+            .mapValues { it.value!! }
     }
 
     private suspend fun cleanOldData(maxDebounceTime: Duration) {
         mutex.withLock {
-            keyTime
-                .filter { (_, value) -> value + maxDebounceTime < Instant.now() }
-                .keys
-                .forEach { key ->
-                    keyTime.remove(key)
-                    values.remove(key)
-                }
+            lastSentTime
+                .entries
+                .removeIf { (_, value) -> value + maxDebounceTime < Instant.now() }
         }
     }
 
@@ -107,13 +109,13 @@ public class FlowDebouncer<Input, Key> {
                     var time: Instant? = null
                     if (key != null) {
                         oldValue = values[key]
-                        val oldTime = keyTime[key]
+                        val oldTime = lastSentTime[key]
                         time = timeProvider.invoke(value, oldTime)
                         if (time != null) {
                             keyTime[key] = time
                             values[key] = value
                         } else {
-                            keyTime[key] = Instant.now()
+                            lastSentTime[key] = Instant.now()
                         }
                     }
                     val skipAction: Action<Input>? = oldValue?.let { Skip(it) }
