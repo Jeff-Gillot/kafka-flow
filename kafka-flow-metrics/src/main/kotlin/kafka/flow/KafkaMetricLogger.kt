@@ -178,7 +178,7 @@ public class KafkaMetricLogger(private val name: String) {
     private fun Double.toMsString(): String = (this / 1.millisecond().toNanos().toDouble()).formatted() + " ms"
     private fun Number.formatBigNumber(): String {
         return when {
-            this.toLong() > 1_000_000_000 -> formatter.format(this.toDouble() / 1_000_000_000) + "b"
+            this.toLong() > 1_000_000_000 -> formatter.format(this.toDouble() / 1_000_000_000) + "g"
             this.toLong() > 1_000_000 -> formatter.format(this.toDouble() / 1_000_000) + "m"
             this.toLong() > 1_000 -> formatter.format(this.toDouble() / 1_000) + "k"
             this is Double || this is Float -> formatter.format(this.toDouble())
