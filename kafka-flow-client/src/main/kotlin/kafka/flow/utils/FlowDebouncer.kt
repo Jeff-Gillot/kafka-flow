@@ -89,8 +89,10 @@ public class FlowDebouncer<Input, Key> {
     private suspend fun cleanOldData(maxDebounceTime: Duration) {
         mutex.withLock {
             lastSentTime
-                .entries
-                .removeIf { (_, value) -> value + maxDebounceTime < Instant.now() }
+                .filter { (_, value) -> value + maxDebounceTime < Instant.now() }
+                .keys
+                .toList()
+                .forEach { key -> lastSentTime.remove(key) }
         }
     }
 
