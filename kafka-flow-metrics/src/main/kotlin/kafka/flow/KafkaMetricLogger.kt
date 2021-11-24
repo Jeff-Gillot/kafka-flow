@@ -108,7 +108,8 @@ public class KafkaMetricLogger(private val name: String) {
                 0 -> append(" No input yet")
                 else -> {
                     _inputMeters.entries.forEach { (key, value) ->
-                        val eta = computeEta(key, value.fifteenMinuteRate)
+                        val lag = computeLag(key)
+                        val eta = computeEta(lag, value.fifteenMinuteRate)
                         val snapshot = _timers[key]?.snapshot ?: _timers["mixed"]?.snapshot
                         append(
                             "\r\tIN $key -> " +
@@ -117,9 +118,13 @@ public class KafkaMetricLogger(private val name: String) {
                                     "15 min ${value.fifteenMinuteRate.formatted()}/s, " +
                                     "processing: mean ${snapshot?.mean?.toMsString()}, " +
                                     "99% ${snapshot?.get99thPercentile()?.toMsString()}" +
+                                    when (lag) {
+                                        null -> ""
+                                        else -> ", lag: ${lag.formatBigNumber()} "
+                                    } +
                                     when {
                                         eta == null -> ""
-                                        eta < 1.seconds() -> ", up to date"
+                                        eta < 1.seconds() -> ", ETA: up to date"
                                         else -> ", ETA: $eta"
                                     }
                         )
@@ -152,12 +157,16 @@ public class KafkaMetricLogger(private val name: String) {
             }
         }
 
-    private fun computeEta(topic: String, rate: Double): Duration? {
+    private fun computeLag(topic: String): Long? {
         val topicLag = consumer
             ?.lags()
             ?.filterKeys { it.topic() == topic }
         if (topicLag == null || topicLag.values.contains(null)) return null
-        val lag = topicLag.values.filterNotNull().sum()
+        return topicLag.values.filterNotNull().sum()
+    }
+
+    private fun computeEta(lag: Long?, rate: Double): Duration? {
+        if (lag == null) return null
         return (lag.toDouble() / rate).toInt().seconds()
     }
 
