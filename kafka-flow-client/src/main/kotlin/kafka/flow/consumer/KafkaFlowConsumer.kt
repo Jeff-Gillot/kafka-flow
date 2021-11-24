@@ -13,6 +13,7 @@ public interface KafkaFlowConsumer<ConsumerOutput> {
     public fun isRunning(): Boolean
     public fun isUpToDate(): Boolean
     public fun lag(): Long?
+    public fun lags(): Map<TopicPartition, Long?>?
 
     public suspend fun waitUntilUpToDate() {
         while (isRunning() && !isUpToDate()) delay(10)

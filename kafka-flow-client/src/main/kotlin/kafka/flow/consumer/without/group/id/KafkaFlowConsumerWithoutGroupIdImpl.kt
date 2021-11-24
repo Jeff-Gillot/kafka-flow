@@ -74,24 +74,26 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
         return true
     }
 
-    override fun lag(): Long? {
+    override fun lags(): Map<TopicPartition, Long?>? {
         if (!isRunning()) return null
-        if (assignment.isEmpty()) return 0
-        if (assignment.size != endOffsets.size) return null
-        if (!endOffsets.keys.containsAll(assignment)) return null
-        val lags = assignment.map {
+        if (assignment.isEmpty()) return emptyMap()
+        return assignment.associateWith {
             val endOffset = endOffsets[it]
             val position = positions[it]
             if (position != null && endOffset != null) {
                 (endOffset - position).coerceAtLeast(0)
             } else if (endOffset == 0L) {
-                0
+                0L
             } else {
                 null
             }
         }
-        if (lags.contains(null)) return null
-        return lags.filterNotNull().sum()
+    }
+
+    override fun lag(): Long? {
+        val lags: Map<TopicPartition, Long?>? = lags()
+        if (lags == null || lags.values.contains(null)) return null
+        return lags.values.filterNotNull().sum()
     }
 
     override fun stop() {

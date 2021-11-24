@@ -7,6 +7,7 @@ import kafka.flow.consumer.collect
 import kafka.flow.server.KafkaFlowTopicReaderBuilder
 import java.time.Duration
 import java.util.*
+import org.apache.kafka.common.TopicPartition
 
 public class CacheConsumer<Key, PartitionKey, Value>(
     properties: Properties,
@@ -32,6 +33,7 @@ public class CacheConsumer<Key, PartitionKey, Value>(
     override fun isRunning(): Boolean = delegate.isRunning()
     override fun isUpToDate(): Boolean = delegate.isRunning()
     override fun lag(): Long? = delegate.lag()
+    override fun lags(): Map<TopicPartition, Long?>? = delegate.lags()
 
     override suspend fun get(key: Key): Value? = cache.get(key)
     override suspend fun keys(): List<Key> = cache.keys()

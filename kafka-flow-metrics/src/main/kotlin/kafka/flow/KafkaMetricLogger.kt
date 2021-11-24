@@ -35,6 +35,7 @@ public class KafkaMetricLogger(private val name: String) {
     private val _outputMeters = ConcurrentHashMap<String, Meter>()
     private val _skippedMeters = ConcurrentHashMap<String, Meter>()
     private val _timers = ConcurrentHashMap<String, Timer>()
+    private var consumer: KafkaFlowConsumer<*>? = null
     private val logger = logger()
 
     public val inputMeters: Map<String, Meter> = _inputMeters
@@ -43,6 +44,7 @@ public class KafkaMetricLogger(private val name: String) {
     public val timers: Map<String, Timer> = _timers
 
     public fun start(consumer: KafkaFlowConsumer<*>, interval: Duration = 30.seconds(), printBlock: (KafkaMetricLogger) -> Unit) {
+        this.consumer = consumer
         CoroutineScope(EmptyCoroutineContext).launch {
             val intervalInMillis = interval.toMillis()
             while (consumer.isRunning() && isActive) {
@@ -106,6 +108,7 @@ public class KafkaMetricLogger(private val name: String) {
                 0 -> append(" No input yet")
                 else -> {
                     _inputMeters.entries.forEach { (key, value) ->
+                        val eta = computeEta(key, value.fifteenMinuteRate)
                         val snapshot = _timers[key]?.snapshot ?: _timers["mixed"]?.snapshot
                         append(
                             "\r\tIN $key -> " +
@@ -113,7 +116,8 @@ public class KafkaMetricLogger(private val name: String) {
                                     "1 min ${value.oneMinuteRate.formatted()}/s, " +
                                     "15 min ${value.fifteenMinuteRate.formatted()}/s, " +
                                     "processing: mean ${snapshot?.mean?.toMsString()}, " +
-                                    "99% ${snapshot?.get99thPercentile()?.toMsString()}"
+                                    "99% ${snapshot?.get99thPercentile()?.toMsString()}" +
+                                    if (eta != null) ", ETA: $eta" else ""
                         )
                     }
                 }
@@ -143,6 +147,15 @@ public class KafkaMetricLogger(private val name: String) {
                 )
             }
         }
+
+    private fun computeEta(topic: String, rate: Double): Duration? {
+        val topicLag = consumer
+            ?.lags()
+            ?.filterKeys { it.topic() == topic }
+        if (topicLag == null || topicLag.values.contains(null)) return null
+        val lag = topicLag.values.filterNotNull().sum()
+        return (lag.toDouble() / rate).seconds()
+    }
 
     override fun toString(): String {
         return prettyText
