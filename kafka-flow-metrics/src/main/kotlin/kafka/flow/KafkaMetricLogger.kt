@@ -120,7 +120,7 @@ public class KafkaMetricLogger(private val name: String) {
                                     "99% ${snapshot?.get99thPercentile()?.toMsString()}" +
                                     when (lag) {
                                         null -> ""
-                                        else -> ", lag: ${lag.formatBigNumber()} "
+                                        else -> ", lag: ${lag.formatBigNumber()}"
                                     } +
                                     when {
                                         eta == null -> ""
