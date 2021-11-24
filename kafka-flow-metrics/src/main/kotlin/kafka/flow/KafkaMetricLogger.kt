@@ -158,7 +158,7 @@ public class KafkaMetricLogger(private val name: String) {
             ?.filterKeys { it.topic() == topic }
         if (topicLag == null || topicLag.values.contains(null)) return null
         val lag = topicLag.values.filterNotNull().sum()
-        return (lag.toDouble() / rate).seconds()
+        return (lag.toDouble() / rate).toInt().seconds()
     }
 
     override fun toString(): String {
