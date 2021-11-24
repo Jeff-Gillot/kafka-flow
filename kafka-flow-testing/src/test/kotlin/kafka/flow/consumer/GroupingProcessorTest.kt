@@ -16,7 +16,7 @@ import strikt.assertions.hasSize
 import strikt.assertions.isEqualTo
 
 
-internal class GroupingProcessorTest : KafkaServerIntegrationTest() {
+internal class GroupingProcessorTest {
     @Test
     fun testGrouping() = runTest {
         val testTopic1 = TestTopicDescriptor.next()

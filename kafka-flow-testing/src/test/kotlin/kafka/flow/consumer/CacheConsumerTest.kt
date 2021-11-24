@@ -17,7 +17,7 @@ import strikt.assertions.isEmpty
 import strikt.assertions.isEqualTo
 import java.time.Instant
 
-class CacheConsumerTest : KafkaServerIntegrationTest() {
+class CacheConsumerTest {
 
     @Test
     fun testNoMessage_emptyCache() = runTest {

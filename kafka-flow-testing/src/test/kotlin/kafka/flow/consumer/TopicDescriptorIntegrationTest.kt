@@ -13,7 +13,7 @@ import org.testcontainers.shaded.org.apache.commons.lang.RandomStringUtils
 import strikt.api.expectThat
 import strikt.assertions.isEqualTo
 
-class TopicDescriptorIntegrationTest : KafkaServerIntegrationTest() {
+class TopicDescriptorIntegrationTest {
     @Test
     fun sendTestRecord_ReceiveTestRecord() = runTest {
         val testTopic1 = TestTopicDescriptor.next()

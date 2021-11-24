@@ -8,18 +8,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
-abstract class KafkaServerIntegrationTest {
-    fun runTest(block: suspend CoroutineScope.() -> Unit) {
-        runBlocking {
-            launch {
-                delay(120_000)
-                throw TimeoutException("Test didn't finish in time")
-            }
-            try {
-                block.invoke(this)
-            } finally {
-                currentCoroutineContext().cancelChildren()
-            }
+fun runTest(block: suspend CoroutineScope.() -> Unit) {
+    runBlocking {
+        launch {
+            delay(120_000)
+            throw TimeoutException("Test didn't finish in time")
+        }
+        try {
+            block.invoke(this)
+        } finally {
+            currentCoroutineContext().cancelChildren()
         }
     }
 }

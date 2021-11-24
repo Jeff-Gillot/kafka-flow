@@ -16,7 +16,6 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
     private val logger = LoggerFactory.getLogger(TransactionManager::class.java)
     private var openedTransactionCount = AtomicInteger()
     private val openTransactions = ConcurrentHashMap<TopicPartition, ConcurrentSkipListMap<Long, AtomicInteger>>()
-    private val highestTransactions = ConcurrentHashMap<TopicPartition, Long>()
     private var topicPartitionToRollback = mutableSetOf<TopicPartition>()
 
     private suspend fun waitTransactionSlotIfNeeded(topicPartition: TopicPartition, offset: Long) {
@@ -35,45 +34,42 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
 
     public suspend fun increaseTransaction(topicPartition: TopicPartition, offset: Long) {
         waitTransactionSlotIfNeeded(topicPartition, offset)
-        val transaction = transactionsOf(topicPartition).computeIfAbsent(offset) { AtomicInteger() }
-        highestTransactions.computeIfAbsent(topicPartition) { offset }
-        highestTransactions.computeIfPresent(topicPartition) { _, previousOffset -> maxOf(offset, previousOffset) }
-        if (transaction.incrementAndGet() == 1) openedTransactionCount.incrementAndGet()
+        transactionsOf(topicPartition).computeIfPresent(offset) { _, value ->
+            if (value.incrementAndGet() == 1) openedTransactionCount.incrementAndGet()
+            value
+        }
+        transactionsOf(topicPartition).computeIfAbsent(offset) {
+            openedTransactionCount.incrementAndGet()
+            AtomicInteger(1)
+        }
     }
 
     public fun decreaseTransaction(topicPartition: TopicPartition, offset: Long) {
-        val transaction = transactionsOf(topicPartition).computeIfAbsent(offset) { AtomicInteger() }
-        if (transaction.decrementAndGet() == 0) openedTransactionCount.decrementAndGet()
+        transactionsOf(topicPartition).computeIfPresent(offset) { _, value ->
+            if (value.decrementAndGet() == 0) openedTransactionCount.decrementAndGet()
+            value
+        }
     }
 
     public suspend fun rollbackAndCommit(client: KafkaFlowConsumerWithGroupId<*>) {
         client.rollback(getPartitionsToRollback())
-        client.commit(getOffsetsToCommit())
+        client.commit(computeAndRemoveOffsetsToCommit())
     }
 
-    private fun getOffsetsToCommit(): Map<TopicPartition, OffsetAndMetadata> {
-        val offsetsToCommit = computeOffsetsToCommit()
-        cleanFinishedTransactions()
-        return offsetsToCommit
-    }
-
-    public fun cleanFinishedTransactions() {
-        openTransactions.values.forEach { transactionMap ->
-            transactionMap.filterValues { it.get() <= 0 }.forEach { transactionMap.remove(it.key) }
-        }
-    }
-
-    private fun computeOffsetsToCommit(): Map<TopicPartition, OffsetAndMetadata> {
+    public fun computeAndRemoveOffsetsToCommit(): Map<TopicPartition, OffsetAndMetadata> {
         return openTransactions
             .mapNotNull { (topicPartition, transactionMap) ->
-                var highestClosedTransaction: Long? = transactionMap
+                val highestClosedTransaction: Long? = transactionMap
                     .entries
                     .takeWhile { it.value.get() <= 0 }
                     .map { it.key }
                     .lastOrNull()
 
-                if (highestClosedTransaction == null && transactionMap.isEmpty())
-                    highestClosedTransaction = highestTransactions.remove(topicPartition)
+                if (highestClosedTransaction != null) {
+                    transactionMap
+                        .entries
+                        .removeIf { it.value.get() == 0 && it.key <= highestClosedTransaction }
+                }
 
                 highestClosedTransaction?.let { topicPartition to OffsetAndMetadata(it + 1) }
             }
@@ -85,7 +81,6 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
         if (topicPartitionToRollback.isNotEmpty()) {
             val partitionsToRollback = topicPartitionToRollback
             partitionsToRollback.forEach { topicPartition ->
-                highestTransactions.remove(topicPartition)
                 openTransactions.remove(topicPartition)
             }
             topicPartitionToRollback = mutableSetOf()
@@ -107,7 +102,6 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
     public fun removePartition(revokedPartition: List<TopicPartition>) {
         revokedPartition.forEach {
             openTransactions.remove(it)
-            highestTransactions.remove(it)
         }
     }
 }

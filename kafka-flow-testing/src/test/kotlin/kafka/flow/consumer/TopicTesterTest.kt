@@ -10,7 +10,7 @@ import strikt.api.expectThrows
 import strikt.assertions.isEqualTo
 import java.time.Instant
 
-internal class TopicTesterTest : KafkaServerIntegrationTest() {
+internal class TopicTesterTest {
     @Test
     fun testNoMessages() = runTest {
         val topic = TestTopicDescriptor.next()

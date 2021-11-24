@@ -73,10 +73,6 @@ public class TransactionProcessor<Key, PartitionKey, Value, Output>(
         }
     }
 
-    override suspend fun endOfBatch() {
-        transactionManager.cleanFinishedTransactions()
-    }
-
     override suspend fun completion() {
         commitLoop?.cancel()
         client?.let { transactionManager.rollbackAndCommit(it) }

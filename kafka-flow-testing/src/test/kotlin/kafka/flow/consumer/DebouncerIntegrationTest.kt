@@ -23,7 +23,7 @@ import strikt.assertions.hasSize
 import strikt.assertions.isEqualTo
 
 @FlowPreview
-class DebouncerIntegrationTest : KafkaServerIntegrationTest() {
+class DebouncerIntegrationTest {
     @Test
     fun sendRecordThenModifiedRecord_ReceiveModifiedRecord() = runTest {
         val testTopic1 = TestTopicDescriptor.next()
