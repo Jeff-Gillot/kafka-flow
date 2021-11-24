@@ -117,7 +117,11 @@ public class KafkaMetricLogger(private val name: String) {
                                     "15 min ${value.fifteenMinuteRate.formatted()}/s, " +
                                     "processing: mean ${snapshot?.mean?.toMsString()}, " +
                                     "99% ${snapshot?.get99thPercentile()?.toMsString()}" +
-                                    if (eta != null) ", ETA: $eta" else ""
+                                    when {
+                                        eta == null -> ""
+                                        eta < 1.seconds() -> ", up to date"
+                                        else -> ", ETA: $eta"
+                                    }
                         )
                     }
                 }
