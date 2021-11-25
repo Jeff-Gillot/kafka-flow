@@ -13,6 +13,13 @@ import java.util.concurrent.ConcurrentHashMap
 import kafka.flow.consumer.KafkaFlowConsumer
 import kafka.flow.consumer.KafkaMessage
 import kafka.flow.consumer.Record
+import kafka.flow.consumer.onEachRecord
+import kafka.flow.consumer.onEndOfBatch
+import kafka.flow.consumer.onPartitionAssigned
+import kafka.flow.consumer.onPartitionRevoked
+import kafka.flow.consumer.onStartConsuming
+import kafka.flow.consumer.onStopConsuming
+import kafka.flow.consumer.processor.Sink
 import kafka.flow.consumer.with.group.id.MaybeTransaction
 import kafka.flow.producer.KafkaOutput
 import kafka.flow.utils.FlowDebouncer
@@ -24,8 +31,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -265,6 +274,26 @@ public class KafkaMetricLogger(private val name: String) {
                     action.data
                 }
             }
+        }
+
+        public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>>.collect(
+            kafkaMetricLogger: KafkaMetricLogger,
+            processor: Sink<Key, Partition, Value, Output, Transaction>
+        ) {
+            return this
+                .onStartConsuming(processor::startConsuming)
+                .onStopConsuming(processor::stopConsuming)
+                .onCompletion { processor.completion() }
+                .onEndOfBatch(processor::endOfBatch)
+                .onPartitionAssigned(processor::partitionAssigned)
+                .onPartitionRevoked(processor::partitionRevoked)
+                .onEachRecord { record ->
+                    val time = measureNanoTime {
+                        processor.record(record.consumerRecord, record.key, record.partitionKey, record.value, record.timestamp, record.output, record.transaction)
+                    }
+                    kafkaMetricLogger.registerInput(record, time)
+                }
+                .collect()
         }
     }
 }
