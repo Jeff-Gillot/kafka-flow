@@ -56,10 +56,11 @@ public class KafkaMetricLogger(private val name: String) {
         this.consumer = consumer
         CoroutineScope(EmptyCoroutineContext).launch {
             val intervalInMillis = interval.toMillis()
+            delay(intervalInMillis)
             while (consumer.isRunning() && isActive) {
                 try {
-                    delay(intervalInMillis)
                     printBlock.invoke(this@KafkaMetricLogger)
+                    delay(intervalInMillis)
                 } catch (cancellationException: CancellationException) {
                 } catch (throwable: Throwable) {
                     logger.error("Error while logging metrics", throwable)
