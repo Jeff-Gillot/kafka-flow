@@ -61,6 +61,7 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
 
     public fun computeAndRemoveOffsetsToCommit(assignment: List<TopicPartition>): Map<TopicPartition, OffsetAndMetadata> {
         openTransactions.entries.removeIf { it.key !in assignment }
+        openedTransactionCount = AtomicInteger(openTransactions.values.flatMap { it.values }.sumOf { it.get() })
 
         return openTransactions
             .filterKeys { it in assignment }
