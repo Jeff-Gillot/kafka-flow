@@ -6,7 +6,6 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kafka.flow.consumer.KafkaFlowConsumerWithGroupId
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.sync.Mutex
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
 import org.slf4j.LoggerFactory
@@ -16,7 +15,6 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
     private var openedTransactionCount = AtomicInteger()
     private val openTransactions = ConcurrentHashMap<TopicPartition, ConcurrentHashMap<Long, AtomicInteger>>()
     private var topicPartitionToRollback = mutableSetOf<TopicPartition>()
-    private val mutex = Mutex()
 
     private suspend fun waitTransactionSlotIfNeeded(topicPartition: TopicPartition, offset: Long) {
         val transactionAlreadyExists = transactionsOf(topicPartition).containsKey(offset)
