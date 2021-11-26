@@ -38,7 +38,7 @@ import org.apache.kafka.common.serialization.ByteArrayDeserializer
 
 public class KafkaFlowConsumerWithoutGroupIdImpl(
     clientProperties: Properties,
-    private val assignment: List<TopicPartition>,
+    override val assignment: List<TopicPartition>,
     private val startOffsetPolicy: StartOffsetPolicy,
     private val autoStopPolicy: AutoStopPolicy
 ) : KafkaFlowConsumerWithoutGroupId<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>> {

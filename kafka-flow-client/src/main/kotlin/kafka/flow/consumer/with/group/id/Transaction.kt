@@ -3,13 +3,15 @@ package kafka.flow.consumer.with.group.id
 import org.apache.kafka.common.TopicPartition
 
 public sealed interface MaybeTransaction {
-    public suspend fun lock()
+    public fun lock()
     public fun unlock()
     public fun rollback()
+    public suspend fun register()
 }
 
 public object WithoutTransaction : MaybeTransaction {
-    override suspend fun lock() {}
+    override suspend fun register() {}
+    override fun lock() {}
     override fun unlock() {}
     override fun rollback() {}
 }
@@ -19,7 +21,7 @@ public class WithTransaction(
     private val offset: Long,
     private val transactionManager: TransactionManager
 ) : MaybeTransaction {
-    public override suspend fun lock() {
+    public override fun lock() {
         transactionManager.increaseTransaction(topicPartition, offset)
     }
 
@@ -29,6 +31,10 @@ public class WithTransaction(
 
     public override fun rollback() {
         transactionManager.markRollback(topicPartition)
+    }
+
+    override suspend fun register() {
+        transactionManager.registerTransaction(topicPartition, offset)
     }
 
     override fun toString(): String {

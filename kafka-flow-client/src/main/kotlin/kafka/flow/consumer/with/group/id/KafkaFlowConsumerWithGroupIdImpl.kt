@@ -53,11 +53,12 @@ public class KafkaFlowConsumerWithGroupIdImpl(
     private var stopRequested: Boolean = false
     private var startInstant: Instant? = null
     private var endOffsets: Map<TopicPartition, Long> = emptyMap()
-    private var assignment: List<TopicPartition> = emptyList()
+    private var _assignment: List<TopicPartition> = emptyList()
     private val partitionChangedMessages = mutableListOf<PartitionChangedMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>()
     private val delegateMutex = Mutex()
     private val pollDuration = 10.milliseconds()
     private val positions = ConcurrentHashMap<TopicPartition, Long>()
+    override val assignment: List<TopicPartition> get() = _assignment
 
     init {
         requireNotNull(clientProperties[ConsumerConfig.GROUP_ID_CONFIG]) { "${ConsumerConfig.GROUP_ID_CONFIG} must be set" }
@@ -82,8 +83,8 @@ public class KafkaFlowConsumerWithGroupIdImpl(
 
     override fun lags(): Map<TopicPartition, Long?>? {
         if (!isRunning()) return null
-        if (assignment.isEmpty()) return emptyMap()
-        return assignment.associateWith {
+        if (_assignment.isEmpty()) return emptyMap()
+        return _assignment.associateWith {
             val endOffset = endOffsets[it]
             val position = positions[it]
             if (position != null && endOffset != null) {
@@ -187,7 +188,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
         partitionChangedMessages.clear()
         records.map { Record(it, Unit, Unit, Unit, Instant.ofEpochMilli(it.timestamp()), Unit, WithoutTransaction) }.forEach { channel.send(it) }
         delegateMutex.withLock {
-            assignment.forEach { topicPartition ->
+            _assignment.forEach { topicPartition ->
                 runCatching { delegate.position(topicPartition) }
                     .onSuccess { positions[topicPartition] = it }
                     .onFailure { positions.remove(topicPartition) }
@@ -225,7 +226,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
             endOffsetConsumer.use {
                 while (!shouldStop()) {
                     try {
-                        endOffsets = endOffsetConsumer.endOffsets(assignment)
+                        endOffsets = endOffsetConsumer.endOffsets(_assignment)
                         delay(10.seconds().toMillis())
                     } catch (t: Throwable) {
                         logger.warn("Error while trying to fetch the end offsets", t)
@@ -236,14 +237,14 @@ public class KafkaFlowConsumerWithGroupIdImpl(
     }
 
     private fun partitionAssigned(assignedPartitions: List<TopicPartition>) {
-        assignment = delegate.assignment().toList()
+        _assignment = delegate.assignment().toList()
         seek(assignedPartitions)
-        partitionChangedMessages.add(PartitionsAssigned(assignedPartitions, assignment))
+        partitionChangedMessages.add(PartitionsAssigned(assignedPartitions, _assignment))
     }
 
     private fun partitionRevoked(revokedPartition: List<TopicPartition>) {
-        assignment = delegate.assignment().toList()
-        partitionChangedMessages.add(PartitionsRevoked(revokedPartition, assignment))
+        _assignment = delegate.assignment().toList()
+        partitionChangedMessages.add(PartitionsRevoked(revokedPartition, _assignment))
     }
 
     private fun seek(assignedPartitions: List<TopicPartition>) {

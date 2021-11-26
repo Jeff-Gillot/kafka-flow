@@ -2,12 +2,11 @@ package kafka.flow.consumer.with.group.id
 
 import be.delta.flow.time.seconds
 import java.time.Instant
-import java.util.SortedMap
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ConcurrentSkipListMap
 import java.util.concurrent.atomic.AtomicInteger
 import kafka.flow.consumer.KafkaFlowConsumerWithGroupId
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
 import org.slf4j.LoggerFactory
@@ -15,8 +14,9 @@ import org.slf4j.LoggerFactory
 public class TransactionManager(private val maxOpenTransactions: Int) {
     private val logger = LoggerFactory.getLogger(TransactionManager::class.java)
     private var openedTransactionCount = AtomicInteger()
-    private val openTransactions = ConcurrentHashMap<TopicPartition, ConcurrentSkipListMap<Long, AtomicInteger>>()
+    private val openTransactions = ConcurrentHashMap<TopicPartition, ConcurrentHashMap<Long, AtomicInteger>>()
     private var topicPartitionToRollback = mutableSetOf<TopicPartition>()
+    private val mutex = Mutex()
 
     private suspend fun waitTransactionSlotIfNeeded(topicPartition: TopicPartition, offset: Long) {
         val transactionAlreadyExists = transactionsOf(topicPartition).containsKey(offset)
@@ -32,15 +32,18 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
         }
     }
 
-    public suspend fun increaseTransaction(topicPartition: TopicPartition, offset: Long) {
+    public suspend fun registerTransaction(topicPartition: TopicPartition, offset: Long) {
         waitTransactionSlotIfNeeded(topicPartition, offset)
-        transactionsOf(topicPartition).computeIfPresent(offset) { _, value ->
-            if (value.incrementAndGet() == 1) openedTransactionCount.incrementAndGet()
-            value
-        }
         transactionsOf(topicPartition).computeIfAbsent(offset) {
             openedTransactionCount.incrementAndGet()
             AtomicInteger(1)
+        }
+    }
+
+    public fun increaseTransaction(topicPartition: TopicPartition, offset: Long) {
+        transactionsOf(topicPartition).computeIfPresent(offset) { _, value ->
+            if (value.incrementAndGet() == 1) openedTransactionCount.incrementAndGet()
+            value
         }
     }
 
@@ -53,14 +56,18 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
 
     public suspend fun rollbackAndCommit(client: KafkaFlowConsumerWithGroupId<*>) {
         client.rollback(getPartitionsToRollback())
-        client.commit(computeAndRemoveOffsetsToCommit())
+        client.commit(computeAndRemoveOffsetsToCommit(client.assignment))
     }
 
-    public fun computeAndRemoveOffsetsToCommit(): Map<TopicPartition, OffsetAndMetadata> {
+    public fun computeAndRemoveOffsetsToCommit(assignment: List<TopicPartition>): Map<TopicPartition, OffsetAndMetadata> {
+        openTransactions.entries.removeIf { it.key !in assignment }
+
         return openTransactions
+            .filterKeys { it in assignment }
             .mapNotNull { (topicPartition, transactionMap) ->
                 val highestClosedTransaction: Long? = transactionMap
                     .entries
+                    .sortedBy { it.key }
                     .takeWhile { it.value.get() <= 0 }
                     .map { it.key }
                     .lastOrNull()
@@ -95,8 +102,8 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
         topicPartitionToRollback.add(topicPartition)
     }
 
-    private fun transactionsOf(topicPartition: TopicPartition): SortedMap<Long, AtomicInteger> {
-        return openTransactions.computeIfAbsent(topicPartition) { ConcurrentSkipListMap() }
+    private fun transactionsOf(topicPartition: TopicPartition): ConcurrentHashMap<Long, AtomicInteger> {
+        return openTransactions.computeIfAbsent(topicPartition) { ConcurrentHashMap() }
     }
 
     public fun removePartition(revokedPartition: List<TopicPartition>) {

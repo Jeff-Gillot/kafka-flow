@@ -1,12 +1,14 @@
 package kafka.flow.consumer
 
+import java.io.Closeable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
-import java.io.Closeable
 
 public interface KafkaFlowConsumer<ConsumerOutput> {
+    public val assignment: List<TopicPartition>
+
     public suspend fun startConsuming(onDeserializationException: suspend (Throwable) -> Unit = { it.printStackTrace() }): ConsumerOutput
     public fun stop()
 

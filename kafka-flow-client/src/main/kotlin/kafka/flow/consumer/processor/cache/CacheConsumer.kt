@@ -34,6 +34,7 @@ public class CacheConsumer<Key, PartitionKey, Value>(
     override fun isUpToDate(): Boolean = delegate.isRunning()
     override fun lag(): Long? = delegate.lag()
     override fun lags(): Map<TopicPartition, Long?>? = delegate.lags()
+    override val assignment: List<TopicPartition> get() = delegate.assignment
 
     override suspend fun get(key: Key): Value? = cache.get(key)
     override suspend fun keys(): List<Key> = cache.keys()

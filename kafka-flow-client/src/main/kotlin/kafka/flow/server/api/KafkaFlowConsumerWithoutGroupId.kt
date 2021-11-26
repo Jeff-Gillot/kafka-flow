@@ -29,4 +29,5 @@ public class KafkaFlowConsumerWithoutGroupId<Key, PartitionKey, Value>(
     override fun lag(): Long? = delegate.lag()
     override fun lags(): Map<TopicPartition, Long?>? = delegate.lags()
     override fun close(): Unit = delegate.close()
+    override val assignment: List<TopicPartition> get() = delegate.assignment
 }

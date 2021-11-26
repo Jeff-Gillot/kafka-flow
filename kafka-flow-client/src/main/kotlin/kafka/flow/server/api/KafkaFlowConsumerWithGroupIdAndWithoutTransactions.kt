@@ -31,5 +31,6 @@ public class KafkaFlowConsumerWithGroupIdAndWithoutTransactions<Key, PartitionKe
     override suspend fun commit(commitOffsets: Map<TopicPartition, OffsetAndMetadata>): Unit = delegate.commit(commitOffsets)
     override suspend fun rollback(topicPartitionToRollback: Set<TopicPartition>): Unit = delegate.rollback(topicPartitionToRollback)
     override fun close(): Unit = delegate.close()
+    override val assignment: List<TopicPartition> get() = delegate.assignment
 
 }

@@ -40,7 +40,7 @@ public class TransactionProcessor<Key, PartitionKey, Value, Output>(
         transaction: WithoutTransaction
     ): Record<Key, PartitionKey, Value, Output, WithTransaction> {
         val newTransaction = WithTransaction(TopicPartition(consumerRecord.topic(), consumerRecord.partition()), consumerRecord.offset(), transactionManager)
-        newTransaction.lock()
+        newTransaction.register()
         return Record(
             consumerRecord,
             key,
@@ -80,5 +80,9 @@ public class TransactionProcessor<Key, PartitionKey, Value, Output>(
 
     override suspend fun partitionRevoked(revokedPartition: List<TopicPartition>, assignment: List<TopicPartition>) {
         transactionManager.removePartition(revokedPartition)
+    }
+
+    override suspend fun partitionAssigned(newlyAssignedPartitions: List<TopicPartition>, assignment: List<TopicPartition>) {
+        transactionManager.removePartition(newlyAssignedPartitions)
     }
 }
