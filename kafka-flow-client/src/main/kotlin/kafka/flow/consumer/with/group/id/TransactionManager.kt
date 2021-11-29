@@ -54,10 +54,17 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
 
     public suspend fun rollbackAndCommit(client: KafkaFlowConsumerWithGroupId<*>) {
         client.rollback(getPartitionsToRollback())
-        client.commit(computeAndRemoveOffsetsToCommit(client.assignment))
+        client.commit(computeOffsetsToCommit(client.assignment))
+            .onSuccess { committedOffsets ->
+                committedOffsets.forEach { (key, value) ->
+                    transactionsOf(key)
+                        .entries
+                        .removeIf { it.value.get() == 0 && it.key < value.offset() }
+                }
+            }
     }
 
-    public fun computeAndRemoveOffsetsToCommit(assignment: List<TopicPartition>): Map<TopicPartition, OffsetAndMetadata> {
+    public fun computeOffsetsToCommit(assignment: List<TopicPartition>): Map<TopicPartition, OffsetAndMetadata> {
         openTransactions.entries.removeIf { it.key !in assignment }
         openedTransactionCount = AtomicInteger(openTransactions.values.flatMap { it.values }.sumOf { it.get() })
 
@@ -70,12 +77,6 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
                     .takeWhile { it.value.get() <= 0 }
                     .map { it.key }
                     .lastOrNull()
-
-                if (highestClosedTransaction != null) {
-                    transactionMap
-                        .entries
-                        .removeIf { it.value.get() == 0 && it.key <= highestClosedTransaction }
-                }
 
                 highestClosedTransaction?.let { topicPartition to OffsetAndMetadata(it + 1) }
             }

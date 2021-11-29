@@ -25,7 +25,7 @@ class TransactionManagerTest {
         transactionManager.registerTransaction(topic1Partition1, 1L)
         transactionManager.decreaseTransaction(topic1Partition1, 1L)
 
-        val result = transactionManager.computeAndRemoveOffsetsToCommit(assignment)
+        val result = transactionManager.computeOffsetsToCommit(assignment)
 
         expectThat(result).hasSize(1)
         expectThat(result).containsKey(topic1Partition1)
@@ -43,7 +43,7 @@ class TransactionManagerTest {
         transactionManager.decreaseTransaction(topic1Partition1, 1L)
         transactionManager.decreaseTransaction(topic1Partition1, 2L)
 
-        val result = transactionManager.computeAndRemoveOffsetsToCommit(assignment)
+        val result = transactionManager.computeOffsetsToCommit(assignment)
 
         expectThat(result).hasSize(1)
         expectThat(result).containsKey(topic1Partition1)
@@ -57,8 +57,8 @@ class TransactionManagerTest {
         transactionManager.registerTransaction(topic1Partition1, 1L)
         transactionManager.decreaseTransaction(topic1Partition1, 1L)
 
-        transactionManager.computeAndRemoveOffsetsToCommit(assignment)
-        val result = transactionManager.computeAndRemoveOffsetsToCommit(assignment)
+        transactionManager.computeOffsetsToCommit(assignment)
+        val result = transactionManager.computeOffsetsToCommit(assignment)
 
         expectThat(result).isEmpty()
     }
@@ -74,12 +74,12 @@ class TransactionManagerTest {
         transactionManager.decreaseTransaction(topic1Partition1, 1L)
         transactionManager.decreaseTransaction(topic1Partition1, 2L)
 
-        transactionManager.computeAndRemoveOffsetsToCommit(assignment)
+        transactionManager.computeOffsetsToCommit(assignment)
 
         transactionManager.decreaseTransaction(topic1Partition1, 3L)
         transactionManager.decreaseTransaction(topic1Partition1, 4L)
 
-        val result = transactionManager.computeAndRemoveOffsetsToCommit(assignment)
+        val result = transactionManager.computeOffsetsToCommit(assignment)
         expectThat(result).hasSize(1)
         expectThat(result).containsKey(topic1Partition1)
         expectThat(result[topic1Partition1]!!.offset()).isEqualTo(5L)
@@ -96,7 +96,7 @@ class TransactionManagerTest {
         transactionManager.decreaseTransaction(topic1Partition1, 3L)
         transactionManager.decreaseTransaction(topic1Partition1, 4L)
 
-        val result = transactionManager.computeAndRemoveOffsetsToCommit(assignment)
+        val result = transactionManager.computeOffsetsToCommit(assignment)
         expectThat(result).isEmpty()
     }
 
@@ -113,7 +113,7 @@ class TransactionManagerTest {
         transactionManager.decreaseTransaction(topic1Partition1, 4L)
         transactionManager.decreaseTransaction(topic1Partition1, 1L)
 
-        val result = transactionManager.computeAndRemoveOffsetsToCommit(assignment)
+        val result = transactionManager.computeOffsetsToCommit(assignment)
         expectThat(result).hasSize(1)
         expectThat(result).containsKey(topic1Partition1)
         expectThat(result[topic1Partition1]!!.offset()).isEqualTo(2L)
@@ -135,7 +135,7 @@ class TransactionManagerTest {
         transactionManager.decreaseTransaction(topic1Partition2, 4L)
         transactionManager.decreaseTransaction(topic2Partition1, 1L)
 
-        val result = transactionManager.computeAndRemoveOffsetsToCommit(assignment)
+        val result = transactionManager.computeOffsetsToCommit(assignment)
         expectThat(result).hasSize(2)
         expectThat(result).containsKeys(topic1Partition1, topic2Partition1)
         expectThat(result[topic1Partition1]!!.offset()).isEqualTo(3L)
@@ -157,11 +157,11 @@ class TransactionManagerTest {
         transactionManager.decreaseTransaction(topic1Partition1, 2L)
         transactionManager.decreaseTransaction(topic1Partition2, 4L)
         transactionManager.decreaseTransaction(topic2Partition1, 1L)
-        transactionManager.computeAndRemoveOffsetsToCommit(assignment)
+        transactionManager.computeOffsetsToCommit(assignment)
 
         transactionManager.decreaseTransaction(topic2Partition2, 1L)
 
-        val result = transactionManager.computeAndRemoveOffsetsToCommit(assignment)
+        val result = transactionManager.computeOffsetsToCommit(assignment)
         expectThat(result).hasSize(1)
         expectThat(result).containsKeys(topic2Partition2)
         expectThat(result[topic2Partition2]!!.offset()).isEqualTo(2L)
@@ -179,7 +179,7 @@ class TransactionManagerTest {
 
         transactionManager.decreaseTransaction(topic1Partition1, 1L)
 
-        val result = transactionManager.computeAndRemoveOffsetsToCommit(assignment)
+        val result = transactionManager.computeOffsetsToCommit(assignment)
         expectThat(result).hasSize(0)
     }
 
@@ -197,7 +197,7 @@ class TransactionManagerTest {
             transactionManager.decreaseTransaction(topic1Partition1, 1L)
         }
 
-        val result = transactionManager.computeAndRemoveOffsetsToCommit(assignment)
+        val result = transactionManager.computeOffsetsToCommit(assignment)
         expectThat(result).hasSize(1)
         expectThat(result).containsKeys(topic1Partition1)
         expectThat(result[topic1Partition1]!!.offset()).isEqualTo(2L)

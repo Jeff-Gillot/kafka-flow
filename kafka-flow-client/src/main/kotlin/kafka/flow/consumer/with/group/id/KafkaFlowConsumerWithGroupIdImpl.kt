@@ -111,44 +111,34 @@ public class KafkaFlowConsumerWithGroupIdImpl(
         stop()
     }
 
-    override suspend fun commit(commitOffsets: Map<TopicPartition, OffsetAndMetadata>) {
-        if (commitOffsets.isEmpty()) return
-        retryUntilSuccess {
-            var result: Result<Unit> = Result.success(Unit)
-            val mutex = Mutex(true)
+    override suspend fun commit(offsetsToCommit: Map<TopicPartition, OffsetAndMetadata>): Result<Map<TopicPartition, OffsetAndMetadata>> {
+        val mutex = Mutex(true)
+        var result: Result<Map<TopicPartition, OffsetAndMetadata>>? = null
+
+        if (!isRunning()) {
+            result = Result.success(emptyMap())
+        } else {
             delegateMutex.withLock {
                 try {
-                    if (!isRunning()) {
-                        result = Result.success(Unit)
-                    } else {
-                        delegate.commitAsync(commitOffsets) { offsets, exception ->
-                            result = if (exception != null) {
-                                logger.warn("Error while committing offsets ($offsets), the system will retry", exception)
-                                Result.failure(exception)
-                            } else {
-                                Result.success(Unit)
-                            }
+                    delegate.commitAsync(offsetsToCommit) { offsets, exception ->
+                        result = if (exception != null) {
+                            logger.warn("Error while committing offsets ($offsetsToCommit), the system will retry", exception)
+                            Result.failure(exception)
+                        } else {
+                            Result.success(offsets!!)
                         }
+                        mutex.unlock()
                     }
                 } catch (throwable: Throwable) {
-                    logger.warn("Error while committing offsets ($commitOffsets), the system will retry", throwable)
+                    logger.warn("Error while committing offsets ($offsetsToCommit), the system will retry", throwable)
                     result = Result.failure(throwable)
-                } finally {
                     mutex.unlock()
                 }
             }
-            mutex.lock()
-            result
         }
-    }
+        mutex.lock()
 
-    private suspend fun <T> retryUntilSuccess(block: suspend () -> Result<T>): T {
-        val retries = AtomicInteger(3)
-        var result: Result<T>
-        do {
-            result = block.invoke()
-        } while (!result.isSuccess && retries.decrementAndGet() > 0)
-        return result.getOrThrow()
+        return result!!
     }
 
     override suspend fun rollback(topicPartitionToRollback: Set<TopicPartition>) {

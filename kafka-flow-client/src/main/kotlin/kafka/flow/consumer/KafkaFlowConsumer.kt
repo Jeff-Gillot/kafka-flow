@@ -31,6 +31,6 @@ public interface KafkaFlowConsumer<ConsumerOutput> {
 public interface KafkaFlowConsumerWithoutGroupId<FlowType> : KafkaFlowConsumer<Flow<FlowType>>, Closeable
 
 public interface KafkaFlowConsumerWithGroupId<FlowType> : KafkaFlowConsumer<Flow<FlowType>>, Closeable {
-    public suspend fun commit(commitOffsets: Map<TopicPartition, OffsetAndMetadata>)
+    public suspend fun commit(offsetsToCommit: Map<TopicPartition, OffsetAndMetadata>): Result<Map<TopicPartition, OffsetAndMetadata>>
     public suspend fun rollback(topicPartitionToRollback: Set<TopicPartition>)
 }
