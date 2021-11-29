@@ -63,8 +63,8 @@ public class TransactionProcessor<Key, PartitionKey, Value, Output>(
                         delay(commitInterval.toMillis())
                         transactionManager.rollbackAndCommit(client)
                     } catch (cancellation: CancellationException) {
-                    } catch (exception: Exception) {
-                        logger.warn("Error while trying to commit the offsets to the server", exception)
+                    } catch (exception: Throwable) {
+                        logger.error("Error while trying to commit the offsets to the server", exception)
                     }
                 }
             } finally {

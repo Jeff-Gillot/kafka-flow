@@ -51,13 +51,14 @@ class TransactionManagerTest {
     }
 
     @Test
-    fun offsetsToCommitCleansInfo() = runTest {
+    fun cleanCommittedOffset() = runTest {
         val transactionManager = TransactionManager(1000)
 
         transactionManager.registerTransaction(topic1Partition1, 1L)
         transactionManager.decreaseTransaction(topic1Partition1, 1L)
 
-        transactionManager.computeOffsetsToCommit(assignment)
+        transactionManager.removeCommittedOffsets(transactionManager.computeOffsetsToCommit(assignment))
+
         val result = transactionManager.computeOffsetsToCommit(assignment)
 
         expectThat(result).isEmpty()
@@ -74,7 +75,9 @@ class TransactionManagerTest {
         transactionManager.decreaseTransaction(topic1Partition1, 1L)
         transactionManager.decreaseTransaction(topic1Partition1, 2L)
 
-        transactionManager.computeOffsetsToCommit(assignment)
+        transactionManager.removeCommittedOffsets(transactionManager.computeOffsetsToCommit(assignment))
+
+        expectThat(transactionManager.computeOffsetsToCommit(assignment)).isEmpty()
 
         transactionManager.decreaseTransaction(topic1Partition1, 3L)
         transactionManager.decreaseTransaction(topic1Partition1, 4L)
@@ -157,7 +160,7 @@ class TransactionManagerTest {
         transactionManager.decreaseTransaction(topic1Partition1, 2L)
         transactionManager.decreaseTransaction(topic1Partition2, 4L)
         transactionManager.decreaseTransaction(topic2Partition1, 1L)
-        transactionManager.computeOffsetsToCommit(assignment)
+        transactionManager.removeCommittedOffsets(transactionManager.computeOffsetsToCommit(assignment))
 
         transactionManager.decreaseTransaction(topic2Partition2, 1L)
 
