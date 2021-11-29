@@ -2,6 +2,9 @@ package kafka.flow.consumer
 
 import be.delta.flow.time.second
 import be.delta.flow.time.seconds
+import java.util.Properties
+import java.util.UUID
+import java.util.concurrent.TimeUnit
 import kafka.flow.TopicDescriptor
 import kafka.flow.consumer.with.group.id.KafkaFlowConsumerWithGroupIdImpl
 import kafka.flow.producer.KafkaFlowTopicProducer
@@ -10,8 +13,12 @@ import kafka.flow.testing.Await
 import kafka.flow.testing.TestObject
 import kafka.flow.testing.TestTopicDescriptor
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.apache.kafka.clients.admin.AdminClient
@@ -27,8 +34,6 @@ import org.testcontainers.containers.KafkaContainer
 import org.testcontainers.utility.DockerImageName
 import strikt.api.expectThat
 import strikt.assertions.isEqualTo
-import java.util.*
-import java.util.concurrent.TimeUnit
 
 
 @Suppress("BlockingMethodInNonBlockingContext")
@@ -95,6 +100,58 @@ class TransactionManagerIntegrationTest {
     }
 
     @Test
+    fun committingTransactionWithDelay_changesCommittedOffsets_restartWhereWeLeftOff(): Unit = runTest {
+        consumer = KafkaFlowConsumerWithGroupIdImpl(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
+
+        var count = 0
+        launch {
+            consumer!!
+                .startConsuming()
+                .createTransactions(10, 1.second())
+                .onEachRecord {
+                    if (count < 5) {
+                        delay(100)
+                        println("unlocking ${it.transaction}")
+                        it.transaction.unlock()
+                    }
+                    count++
+                }
+                .collect()
+        }
+
+        repeat(10) { producer.send(TestObject.random()) }
+
+        Await().untilAsserted {
+            val committedOffsets = admin.listConsumerGroupOffsets(groupId).partitionsToOffsetAndMetadata().get().values.sumOf { it.offset() }
+            expectThat(committedOffsets).isEqualTo(5)
+        }
+
+        consumer?.stop()
+        consumer = KafkaFlowConsumerWithGroupIdImpl(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
+
+        count = 0
+        launch {
+            consumer!!
+                .startConsuming()
+                .createTransactions(10, 1.second())
+                .onEachRecord {
+                    launch {
+                        delay(100)
+                        it.transaction.unlock()
+                    }
+                    count++
+                }
+                .collect()
+        }
+
+        Await().untilAsserted {
+            validateCommittedOffset(10)
+        }
+
+        expectThat(count).isEqualTo(5)
+    }
+
+    @Test
     fun notCommitting_stopsProcessing(): Unit = runTest {
         consumer = KafkaFlowConsumerWithGroupIdImpl(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
 
@@ -128,7 +185,8 @@ class TransactionManagerIntegrationTest {
         repeat(20) { producer.send(TestObject.random()) }
 
         Await().untilAsserted {
-            val committedOffsets: Map<TopicPartition, Long> = admin.listConsumerGroupOffsets(groupId).partitionsToOffsetAndMetadata().get(30, TimeUnit.SECONDS).mapValues { (_, value) -> value.offset() }
+            val committedOffsets: Map<TopicPartition, Long> =
+                admin.listConsumerGroupOffsets(groupId).partitionsToOffsetAndMetadata().get(30, TimeUnit.SECONDS).mapValues { (_, value) -> value.offset() }
             expectThat(committedOffsets.values.sum()).isEqualTo(10)
         }
     }
@@ -192,6 +250,7 @@ class TransactionManagerIntegrationTest {
                 block.invoke(this)
             } finally {
                 consumer?.stop()
+                currentCoroutineContext().cancelChildren()
             }
         }
     }
