@@ -54,13 +54,17 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
 
     public suspend fun rollbackAndCommit(client: KafkaFlowConsumerWithGroupId<*>) {
         client.rollback(getPartitionsToRollback())
-        client.commit(computeOffsetsToCommit(client.assignment))
+        val offsetsToCommit = computeOffsetsToCommit(client.assignment)
+        client.commit(offsetsToCommit)
             .onSuccess { committedOffsets ->
                 committedOffsets.forEach { (key, value) ->
                     transactionsOf(key)
                         .entries
                         .removeIf { it.value.get() == 0 && it.key < value.offset() }
                 }
+            }
+            .onFailure {
+                logger.error("Error while committing offsets ($offsetsToCommit), the system will retry", it)
             }
     }
 

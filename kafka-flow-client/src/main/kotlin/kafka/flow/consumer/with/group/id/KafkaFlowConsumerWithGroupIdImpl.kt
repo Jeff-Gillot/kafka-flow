@@ -122,7 +122,6 @@ public class KafkaFlowConsumerWithGroupIdImpl(
                 try {
                     delegate.commitAsync(offsetsToCommit) { offsets, exception ->
                         result = if (exception != null) {
-                            logger.warn("Error while committing offsets ($offsetsToCommit), the system will retry", exception)
                             Result.failure(exception)
                         } else {
                             Result.success(offsets!!)
@@ -130,7 +129,6 @@ public class KafkaFlowConsumerWithGroupIdImpl(
                         mutex.unlock()
                     }
                 } catch (throwable: Throwable) {
-                    logger.warn("Error while committing offsets ($offsetsToCommit), the system will retry", throwable)
                     result = Result.failure(throwable)
                     mutex.unlock()
                 }
