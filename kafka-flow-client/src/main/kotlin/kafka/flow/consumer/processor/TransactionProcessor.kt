@@ -79,10 +79,10 @@ public class TransactionProcessor<Key, PartitionKey, Value, Output>(
     }
 
     override suspend fun partitionRevoked(revokedPartition: List<TopicPartition>, assignment: List<TopicPartition>) {
-        transactionManager.removePartition(revokedPartition)
+        transactionManager.clear()
     }
 
     override suspend fun partitionAssigned(newlyAssignedPartitions: List<TopicPartition>, assignment: List<TopicPartition>) {
-        transactionManager.removePartition(newlyAssignedPartitions)
+        transactionManager.clear()
     }
 }

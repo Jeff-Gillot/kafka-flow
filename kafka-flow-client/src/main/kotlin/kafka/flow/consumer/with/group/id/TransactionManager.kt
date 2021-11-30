@@ -118,8 +118,8 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
         }
     }
 
-    public fun removePartition(revokedPartition: List<TopicPartition>) {
-        openedTransactions.keys.removeIf { it.topicPartition in revokedPartition }
-        highestClosedTransaction.keys.removeIf { it in revokedPartition }
+    public fun clear() {
+        openedTransactions.clear()
+        highestClosedTransaction.clear()
     }
 }

@@ -5,6 +5,7 @@ import be.delta.flow.time.seconds
 import java.util.Properties
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import kafka.flow.TopicDescriptor
 import kafka.flow.consumer.with.group.id.KafkaFlowConsumerWithGroupIdImpl
 import kafka.flow.producer.KafkaFlowTopicProducer

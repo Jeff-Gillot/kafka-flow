@@ -226,12 +226,13 @@ public class KafkaFlowConsumerWithGroupIdImpl(
 
     private fun partitionAssigned(assignedPartitions: List<TopicPartition>) {
         _assignment = delegate.assignment().toList()
-        seek(assignedPartitions)
+        seek(_assignment)
         partitionChangedMessages.add(PartitionsAssigned(assignedPartitions, _assignment))
     }
 
     private fun partitionRevoked(revokedPartition: List<TopicPartition>) {
         _assignment = delegate.assignment().toList()
+        seek(_assignment)
         partitionChangedMessages.add(PartitionsRevoked(revokedPartition, _assignment))
     }
 
