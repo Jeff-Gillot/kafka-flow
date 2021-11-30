@@ -29,7 +29,7 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
     public fun close(transaction: WithTransaction) {
         openedTransactions.compute(transaction) { _, value ->
             if (value == null) {
-                logger.error("[TransactionManager] Trying to close a transaction that doesn't exists $transaction", Exception())
+                logger.warn("[TransactionManager] Trying to close a transaction that doesn't exists $transaction")
             }
             highestClosedTransaction.compute(transaction.topicPartition) { _, highestTransaction ->
                 if (highestTransaction == null) {
