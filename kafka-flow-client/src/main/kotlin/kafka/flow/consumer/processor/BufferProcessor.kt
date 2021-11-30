@@ -1,22 +1,28 @@
 package kafka.flow.consumer.processor
 
+import java.time.Duration
+import java.time.Instant
+import java.util.concurrent.ArrayBlockingQueue
 import kafka.flow.consumer.KafkaMessage
 import kafka.flow.consumer.with.group.id.MaybeTransaction
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.consumeAsFlow
 import kotlinx.coroutines.flow.onCompletion
-import java.time.Duration
-import java.time.Instant
-import java.util.concurrent.ConcurrentLinkedQueue
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.yield
 
 public class BufferProcessor<Key, Partition, Value, Transaction : MaybeTransaction>(
     private val batchSize: Int,
     private val timeSpan: Duration
 ) {
-    private val records = ConcurrentLinkedQueue<KafkaMessage<Key, Partition, Value, Unit, Transaction>>()
+    private val records = ArrayBlockingQueue<KafkaMessage<Key, Partition, Value, Unit, Transaction>>(batchSize * 2)
     private var lastBatchTime = Instant.now()
     private val output = Channel<List<KafkaMessage<Key, Partition, Value, Unit, Transaction>>>()
 
@@ -37,7 +43,9 @@ public class BufferProcessor<Key, Partition, Value, Transaction : MaybeTransacti
         val inputReader = CoroutineScope(currentCoroutineContext()).launch {
             try {
                 input.collect { record ->
-                    records.add(record)
+                    while (!records.offer(record)) {
+                        delay(10)
+                    }
                     if (records.size >= batchSize) {
                         sendBatch()
                     }
