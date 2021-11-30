@@ -1,5 +1,8 @@
 package kafka.flow.consumer.with.group.id
 
+import java.time.Instant
+import java.util.concurrent.atomic.AtomicInteger
+import kafka.flow.utils.logger
 import org.apache.kafka.common.TopicPartition
 
 public sealed interface MaybeTransaction {
@@ -17,16 +20,34 @@ public object WithoutTransaction : MaybeTransaction {
 }
 
 public class WithTransaction(
-    private val topicPartition: TopicPartition,
-    private val offset: Long,
-    private val transactionManager: TransactionManager
-) : MaybeTransaction {
+    public val topicPartition: TopicPartition,
+    public val offset: Long,
+    public val transactionManager: TransactionManager,
+    public val transactionTime: Instant = Instant.now(),
+) : MaybeTransaction, Comparable<WithTransaction> {
+    private val locks: AtomicInteger = AtomicInteger(1)
+    private var _closed: Boolean = false
+
+    public val closed: Boolean
+        get() = _closed
+
     public override fun lock() {
-        transactionManager.increaseTransaction(topicPartition, offset)
+        if (_closed) {
+            logger.error("[Transaction][$this] Locking an already closed transaction", Exception())
+        } else {
+            locks.incrementAndGet()
+        }
     }
 
     public override fun unlock() {
-        transactionManager.decreaseTransaction(topicPartition, offset)
+        if (_closed) {
+            logger.error("[Transaction][$this] Unlocking an already closed transaction", Exception())
+        } else {
+            _closed = locks.decrementAndGet() == 0
+            if (_closed) {
+                transactionManager.close(this)
+            }
+        }
     }
 
     public override fun rollback() {
@@ -34,10 +55,25 @@ public class WithTransaction(
     }
 
     override suspend fun register() {
-        transactionManager.registerTransaction(topicPartition, offset)
+        if (_closed) {
+            logger.error("[Transaction][$this] Trying to register a closed transaction", Exception())
+        } else {
+            transactionManager.register(this)
+        }
     }
 
     override fun toString(): String {
-        return "Transaction($topicPartition@$offset)"
+        return "Transaction($topicPartition@$offset)/$transactionTime"
     }
+
+    private companion object {
+        private val logger = logger()
+    }
+
+    override fun compareTo(other: WithTransaction): Int {
+        if (this == other) return 0
+        if (topicPartition != other.topicPartition) return "$topicPartition".compareTo("${other.topicPartition}")
+        return offset.compareTo(other.offset)
+    }
+
 }
