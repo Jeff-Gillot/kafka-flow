@@ -2,7 +2,6 @@ package kafka.flow.consumer.with.group.id
 
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
-import jdk.jfr.StackTrace
 import kafka.flow.utils.logger
 import org.apache.kafka.common.TopicPartition
 
