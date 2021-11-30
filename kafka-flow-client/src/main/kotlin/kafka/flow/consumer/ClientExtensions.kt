@@ -317,10 +317,8 @@ public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransactio
 private fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<FlowDebouncer.Action<KafkaMessage<Key, Partition, Value, Output, Transaction>>>.filterSkipActionsAndCommit():
         Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>> {
     return mapNotNull { action ->
-        if (action is FlowDebouncer.Skip<KafkaMessage<Key, Partition, Value, Output, Transaction>>) {
-            if (action.data is Record<Key, Partition, Value, Output, Transaction>) {
-                (action.data as Record<Key, Partition, Value, Output, Transaction>).transaction.unlock()
-            }
+        if (action is FlowDebouncer.Skip<*>) {
+            (action.data as Record<Key, Partition, Value, Output, Transaction>).transaction.unlock()
             null
         } else {
             action.data

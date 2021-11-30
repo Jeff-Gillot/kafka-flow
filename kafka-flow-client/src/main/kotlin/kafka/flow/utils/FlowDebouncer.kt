@@ -118,6 +118,8 @@ public class FlowDebouncer<Input, Key> {
                             values[key] = value
                         } else {
                             lastSentTime[key] = Instant.now()
+                            keyTime.remove(key)
+                            values.remove(key)
                         }
                     }
                     val skipAction: Action<Input>? = oldValue?.let { Skip(it) }

@@ -60,6 +60,11 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
             .filter { it.transactionTime < Instant.now() - 5.minutes() }
         if (longLastingTransactions.isNotEmpty()) {
             logger.warn("[TransactionManager] These transactions have been opened for a long time $longLastingTransactions")
+            longLastingTransactions.forEach { transaction ->
+                transaction.stackTraces.forEach { stackTrace ->
+                    println("$transaction\n\t${stackTrace.joinToString("\n\t")}")
+                }
+            }
         }
 
         val minOpenedTransactions = openedTransactions

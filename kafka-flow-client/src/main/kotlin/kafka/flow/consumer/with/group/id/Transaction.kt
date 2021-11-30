@@ -2,6 +2,7 @@ package kafka.flow.consumer.with.group.id
 
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
+import jdk.jfr.StackTrace
 import kafka.flow.utils.logger
 import org.apache.kafka.common.TopicPartition
 
@@ -26,13 +27,12 @@ public class WithTransaction(
     public val transactionTime: Instant = Instant.now(),
 ) : MaybeTransaction, Comparable<WithTransaction> {
     private val locks: AtomicInteger = AtomicInteger(1)
-    private var _closed: Boolean = false
-
-    public val closed: Boolean
-        get() = _closed
+    private var closed: Boolean = false
+    public val stackTraces: MutableList<List<StackTraceElement>> = mutableListOf<List<StackTraceElement>>()
 
     public override fun lock() {
-        if (_closed) {
+        synchronized(stackTraces) { stackTraces.add(Exception().stackTrace.toList()) }
+        if (closed) {
             logger.error("[Transaction][$this] Locking an already closed transaction", Exception())
         } else {
             locks.incrementAndGet()
@@ -40,22 +40,25 @@ public class WithTransaction(
     }
 
     public override fun unlock() {
-        if (_closed) {
+        synchronized(stackTraces) { stackTraces.add(Exception().stackTrace.toList()) }
+        if (closed) {
             logger.error("[Transaction][$this] Unlocking an already closed transaction", Exception())
         } else {
-            _closed = locks.decrementAndGet() == 0
-            if (_closed) {
+            if (locks.decrementAndGet() == 0) {
+                closed = true
                 transactionManager.close(this)
             }
         }
     }
 
     public override fun rollback() {
+        synchronized(stackTraces) { stackTraces.add(Exception().stackTrace.toList()) }
         transactionManager.markRollback(topicPartition)
     }
 
     override suspend fun register() {
-        if (_closed) {
+        synchronized(stackTraces) { stackTraces.add(Exception().stackTrace.toList()) }
+        if (closed) {
             logger.error("[Transaction][$this] Trying to register a closed transaction", Exception())
         } else {
             transactionManager.register(this)
@@ -63,7 +66,7 @@ public class WithTransaction(
     }
 
     override fun toString(): String {
-        return "Transaction($topicPartition@$offset)/$transactionTime"
+        return "Transaction($topicPartition@$offset)/$transactionTime/${locks.get()}"
     }
 
     private companion object {
