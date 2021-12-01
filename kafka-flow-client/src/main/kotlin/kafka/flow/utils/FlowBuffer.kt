@@ -1,11 +1,9 @@
-package kafka.flow.consumer.processor
+package kafka.flow.utils
 
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.ArrayBlockingQueue
-import kafka.flow.consumer.KafkaMessage
-import kafka.flow.consumer.with.group.id.MaybeTransaction
-import kotlinx.coroutines.CancellationException
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
@@ -13,20 +11,21 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.consumeAsFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
 
-public class BufferProcessor<Key, Partition, Value, Transaction : MaybeTransaction>(
+public class FlowBuffer<T>(
     private val batchSize: Int,
     private val timeSpan: Duration
 ) {
-    private val records = ArrayBlockingQueue<KafkaMessage<Key, Partition, Value, Unit, Transaction>>(batchSize * 2)
+    private val records = ArrayBlockingQueue<T>(batchSize)
     private var lastBatchTime = Instant.now()
-    private val output = Channel<List<KafkaMessage<Key, Partition, Value, Unit, Transaction>>>()
+    private val output = Channel<List<T>>()
 
-    public suspend fun start(input: Flow<KafkaMessage<Key, Partition, Value, Unit, Transaction>>): Flow<List<KafkaMessage<Key, Partition, Value, Unit, Transaction>>> {
+    public suspend fun start(input: Flow<T>): Flow<List<T>> {
         val timerJob = CoroutineScope(currentCoroutineContext()).launch {
             while (isActive) {
                 do {
@@ -76,6 +75,18 @@ public class BufferProcessor<Key, Partition, Value, Transaction : MaybeTransacti
         lastBatchTime = Instant.now()
         if (recordsToSend.isNotEmpty()) {
             output.send(recordsToSend)
+        }
+    }
+
+    public companion object {
+        public suspend fun <T> Flow<T>.batch(batchSize: Int, timeSpan: Duration): Flow<List<T>> = FlowBuffer<T>(batchSize, timeSpan).start(this)
+
+        public fun <T> Flow<List<T>>.flatten(): Flow<T> = flow {
+            collect { list ->
+                list.forEach {
+                    emit(it)
+                }
+            }
         }
     }
 }

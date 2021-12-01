@@ -6,7 +6,7 @@ import kafka.flow.producer.KafkaOutput
 import kafka.flow.testing.TestObject
 import kafka.flow.testing.TestServer
 import kafka.flow.testing.TestTopicDescriptor
-import kotlinx.coroutines.delay
+import kafka.flow.utils.FlowBuffer.Companion.batch
 import kotlinx.coroutines.launch
 import org.junit.Test
 import org.testcontainers.shaded.org.apache.commons.lang.RandomStringUtils
@@ -56,7 +56,7 @@ class TopicDescriptorIntegrationTest {
             consumer
                 .startConsuming()
                 .ignoreTombstones()
-                .batchRecords(100, 5.seconds())
+                .batch(100, 5.seconds())
                 .mapValuesToOutput { keyValues -> KafkaOutput.forValues(TestServer, testTopic2, keyValues.map { it.second }) }
                 .writeOutputToKafkaAndCommit()
         }
@@ -84,7 +84,7 @@ class TopicDescriptorIntegrationTest {
                 .consumeUntilStopped()
                 .startConsuming()
                 .ignoreTombstones()
-                .batchRecords(100, 1.minute())
+                .batch(100, 1.minute())
                 .mapValuesToOutput { keyValues -> KafkaOutput.forValues(TestServer, testTopic2, keyValues.map { it.second }) }
                 .writeOutputToKafkaAndCommit()
         }

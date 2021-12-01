@@ -7,7 +7,6 @@ import be.delta.flow.time.seconds
 import java.time.Duration
 import java.time.Instant
 import kafka.flow.TopicDescriptor
-import kafka.flow.consumer.processor.BufferProcessor
 import kafka.flow.consumer.processor.BufferedKafkaWriterSink
 import kafka.flow.consumer.processor.GroupingProcessor
 import kafka.flow.consumer.processor.KafkaWriterSink
@@ -279,14 +278,6 @@ public fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<
             block.invoke(message)
     }
 }
-
-
-public suspend fun <Key, Partition, Value, Transaction : MaybeTransaction> Flow<KafkaMessage<Key, Partition, Value, Unit, Transaction>>.batchRecords(
-    batchSize: Int, timeSpan: Duration
-): Flow<List<KafkaMessage<Key, Partition, Value, Unit, Transaction>>> {
-    return BufferProcessor<Key, Partition, Value, Transaction>(batchSize, timeSpan).start(this)
-}
-
 
 public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<List<KafkaMessage<Key, Partition, Value, Unit, Transaction>>>.mapValuesToOutput(
     block: suspend (List<Pair<Key, Value>>) -> Output
