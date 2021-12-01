@@ -18,12 +18,12 @@ public class KafkaWriterSink<Key, PartitionKey, Value, Transaction : MaybeTransa
         output: KafkaOutput,
         transaction: Transaction
     ) {
+        if (transaction is WithTransaction) {
+            transaction.sent = true
+        }
         output.records.forEach { outputRecord ->
             val record: TopicDescriptorRecord<Any, Any, Any> = outputRecord as TopicDescriptorRecord<Any, Any, Any>
             transaction.lock()
-            if (transaction is WithTransaction) {
-                transaction.sent = true
-            }
             when (record) {
                 is TopicDescriptorRecord.Record -> outputRecord.kafkaServer.on(record.topicDescriptor).send(record.value, transaction)
                 is TopicDescriptorRecord.Tombstone -> outputRecord.kafkaServer.on(record.topicDescriptor).sendTombstone(record.key, record.timestamp, transaction)

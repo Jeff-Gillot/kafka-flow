@@ -27,7 +27,7 @@ public class WithTransaction(
 ) : MaybeTransaction {
     private val locks: AtomicInteger = AtomicInteger(1)
     private var closed: Boolean = false
-    public val stackTraces: MutableList<List<StackTraceElement>> = mutableListOf<List<StackTraceElement>>()
+    public val stackTraces: MutableList<List<StackTraceElement>> = mutableListOf()
     public var sent :Boolean = false
 
     public override fun lock() {
