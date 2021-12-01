@@ -46,7 +46,7 @@ public class GroupingProcessor<Key, PartitionKey, Value, Output, Transaction : M
         transaction: Transaction
     ) {
         val channel = getOrCreateProcessor(partitionKey, consumerRecord)
-        channel.send(Record(consumerRecord, key, partitionKey, value, timestamp, output, transaction))
+        channel.await().send(Record(consumerRecord, key, partitionKey, value, timestamp, output, transaction))
     }
 
     override suspend fun startConsuming(client: KafkaFlowConsumer<Flow<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>>) {
@@ -104,10 +104,9 @@ public class GroupingProcessor<Key, PartitionKey, Value, Output, Transaction : M
     private suspend fun getOrCreateProcessor(
         partitionKey: PartitionKey,
         consumerRecord: ConsumerRecord<ByteArray, ByteArray>
-    ): Channel<KafkaMessage<Key, PartitionKey, Value, Output, Transaction>> {
+    ): Deferred<Channel<KafkaMessage<Key, PartitionKey, Value, Output, Transaction>>> {
         val coroutineContext = currentCoroutineContext()
         return processors.compute(partitionKey) { _, value ->
-            println("$partitionKey $value")
             processorLastMessage[partitionKey] = Instant.now()
             if (value != null) {
                 value
@@ -123,6 +122,6 @@ public class GroupingProcessor<Key, PartitionKey, Value, Output, Transaction : M
                     channel
                 }
             }
-        }!!.await()
+        }!!
     }
 }
