@@ -3,10 +3,10 @@ package kafka.flow.utils
 import be.delta.flow.time.milliseconds
 import be.delta.flow.time.second
 import kafka.flow.utils.FlowBuffer.Companion.batch
+import kafka.flow.utils.FlowBuffer.Companion.flatten
 import kotlin.test.Test
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.asFlow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.count
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
@@ -71,13 +71,7 @@ class FlowBufferTest {
             .asFlow()
             .onEach { delay(2) }
             .batch(1000, 1.second())
-            .let { flow->
-                flow {
-                    flow.collect { list ->
-                        list.forEach { emit(it) }
-                    }
-                }
-            }
+            .flatten()
             .count()
 
         expectThat(result).isEqualTo(10_000)
