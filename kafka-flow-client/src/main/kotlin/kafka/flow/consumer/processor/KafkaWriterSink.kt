@@ -1,10 +1,11 @@
 package kafka.flow.consumer.processor
 
+import java.time.Instant
 import kafka.flow.consumer.with.group.id.MaybeTransaction
+import kafka.flow.consumer.with.group.id.WithTransaction
 import kafka.flow.producer.KafkaOutput
 import kafka.flow.producer.TopicDescriptorRecord
 import org.apache.kafka.clients.consumer.ConsumerRecord
-import java.time.Instant
 
 @Suppress("UNCHECKED_CAST")
 public class KafkaWriterSink<Key, PartitionKey, Value, Transaction : MaybeTransaction> : Sink<Key, PartitionKey, Value, KafkaOutput, Transaction> {
@@ -20,6 +21,9 @@ public class KafkaWriterSink<Key, PartitionKey, Value, Transaction : MaybeTransa
         output.records.forEach { outputRecord ->
             val record: TopicDescriptorRecord<Any, Any, Any> = outputRecord as TopicDescriptorRecord<Any, Any, Any>
             transaction.lock()
+            if (transaction is WithTransaction) {
+                transaction.sent = true
+            }
             when (record) {
                 is TopicDescriptorRecord.Record -> outputRecord.kafkaServer.on(record.topicDescriptor).send(record.value, transaction)
                 is TopicDescriptorRecord.Tombstone -> outputRecord.kafkaServer.on(record.topicDescriptor).sendTombstone(record.key, record.timestamp, transaction)
