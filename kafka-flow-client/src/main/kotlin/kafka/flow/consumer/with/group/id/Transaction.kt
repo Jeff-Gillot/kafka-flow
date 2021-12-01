@@ -24,10 +24,11 @@ public class WithTransaction(
     public val offset: Long,
     public val transactionManager: TransactionManager,
     public val transactionTime: Instant = Instant.now(),
-) : MaybeTransaction, Comparable<WithTransaction> {
+) : MaybeTransaction {
     private val locks: AtomicInteger = AtomicInteger(1)
     private var closed: Boolean = false
     public val stackTraces: MutableList<List<StackTraceElement>> = mutableListOf<List<StackTraceElement>>()
+    public var sent :Boolean = false
 
     public override fun lock() {
         synchronized(stackTraces) { stackTraces.add(Exception().stackTrace.toList()) }
@@ -65,17 +66,10 @@ public class WithTransaction(
     }
 
     override fun toString(): String {
-        return "Transaction($topicPartition@$offset)/$transactionTime/${locks.get()}"
+        return "Transaction($topicPartition@$offset)/$transactionTime/${locks.get()} ($sent)"
     }
 
     private companion object {
         private val logger = logger()
     }
-
-    override fun compareTo(other: WithTransaction): Int {
-        if (this == other) return 0
-        if (topicPartition != other.topicPartition) return "$topicPartition".compareTo("${other.topicPartition}")
-        return offset.compareTo(other.offset)
-    }
-
 }

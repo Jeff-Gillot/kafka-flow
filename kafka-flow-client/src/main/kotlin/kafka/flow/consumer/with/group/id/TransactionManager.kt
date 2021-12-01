@@ -35,7 +35,7 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
                 if (highestTransaction == null) {
                     transaction
                 } else {
-                    maxOf(highestTransaction, transaction)
+                    listOf(highestTransaction, transaction).maxByOrNull { it.offset }!!
                 }
             }
             null

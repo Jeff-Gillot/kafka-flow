@@ -1,10 +1,15 @@
 package kafka.flow.consumer
 
+import be.delta.flow.time.minute
+import be.delta.flow.time.second
 import be.delta.flow.time.seconds
+import java.util.concurrent.atomic.AtomicInteger
 import kafka.flow.testing.Await
 import kafka.flow.testing.TestObject
 import kafka.flow.testing.TestServer
 import kafka.flow.testing.TestTopicDescriptor
+import kafka.flow.utils.FlowBuffer.Companion.batch
+import kafka.flow.utils.FlowBuffer.Companion.flatten
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.onCompletion
@@ -66,5 +71,48 @@ internal class GroupingProcessorTest {
             expectThat(results).get { get("A")!!.toList().sortedBy { it.key.id } }.isEqualTo(listOf(testObject1, testObject2, testObject3, testObject6))
             expectThat(results).get { get("B")!!.toList().sortedBy { it.key.id } }.isEqualTo(listOf(testObject4, testObject5))
         }
+    }
+
+
+    @Test
+    fun test() = runTest {
+        val testTopic1 = TestTopicDescriptor.next()
+        TestServer.admin().createTopics(testTopic1)
+
+        val count = AtomicInteger(0)
+
+        launch {
+            TestServer.from(testTopic1)
+                .consumer()
+                .withGroupId(RandomStringUtils.random(5))
+                .autoOffsetResetEarliest(commitInterval = 1.second())
+                .consumeUntilStopped()
+                .startConsuming()
+                .ignoreTombstones()
+                .batch(1000, 1.second())
+                .flatten()
+                .groupByPartitionKey(60.seconds(), 10) { flow, partitionKey ->
+//                    delay(20)
+                    println("New processor $partitionKey")
+                    flow
+                        .onEachRecord {
+                            it.transaction.unlock()
+                            count.incrementAndGet()
+                        }
+                        .collect()
+                }
+        }
+
+        val partitions = (1..100).map { it.toString() }
+
+        repeat(100_000) {
+            TestServer.on(testTopic1).send(TestObject.random().copy(key = TestObject.Key("1", partitions.random())))
+        }
+
+        Await().atMost(1.minute()).untilAsserted {
+            expectThat(count.get()).isEqualTo(100_000)
+        }
+
+        println(count.get())
     }
 }
