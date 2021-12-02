@@ -71,7 +71,12 @@ public class FlowBuffer<T>(
     }
 
     private suspend fun sendRecords() {
-        val recordsToSend = (1..batchSize).map { records.poll() }.takeWhile { it != null }.filterNotNull()
+        val recordsToSend = (1..batchSize)
+            .asSequence()
+            .map { records.poll() }
+            .takeWhile { it != null }
+            .filterNotNull()
+            .toList()
         lastBatchTime = Instant.now()
         if (recordsToSend.isNotEmpty()) {
             output.send(recordsToSend)

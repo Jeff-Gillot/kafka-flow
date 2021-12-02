@@ -59,10 +59,9 @@ public suspend fun <KeyIn, PartitionIn, ValueIn, OutputIn, TransactionIn : Maybe
     block: suspend (Record<KeyIn, PartitionIn, ValueIn, OutputIn, TransactionIn>) -> Record<KeyOut, PartitionOut, ValueOut, OutputOut, TransactionOut>
 ): Flow<KafkaMessage<KeyOut, PartitionOut, ValueOut, OutputOut, TransactionOut>> {
     return map { kafkaMessage ->
-        if (kafkaMessage is Record) {
-            block.invoke(kafkaMessage)
-        } else {
-            kafkaMessage as KafkaMessage<KeyOut, PartitionOut, ValueOut, OutputOut, TransactionOut>
+        when (kafkaMessage) {
+            is Record -> block.invoke(kafkaMessage)
+            is FlowControlMessage -> kafkaMessage as KafkaMessage<KeyOut, PartitionOut, ValueOut, OutputOut, TransactionOut>
         }
     }
 }
@@ -71,10 +70,9 @@ public suspend fun <KeyIn, PartitionIn, ValueIn, OutputIn, TransactionIn : Maybe
     block: suspend (Record<KeyIn, PartitionIn, ValueIn, OutputIn, TransactionIn>) -> Record<KeyOut, PartitionOut, ValueOut, OutputOut, TransactionOut>?
 ): Flow<KafkaMessage<KeyOut, PartitionOut, ValueOut, OutputOut, TransactionOut>> {
     return mapNotNull { kafkaMessage ->
-        if (kafkaMessage is Record) {
-            block.invoke(kafkaMessage)
-        } else {
-            kafkaMessage as KafkaMessage<KeyOut, PartitionOut, ValueOut, OutputOut, TransactionOut>
+        when (kafkaMessage) {
+            is Record -> block.invoke(kafkaMessage)
+            is FlowControlMessage -> kafkaMessage as KafkaMessage<KeyOut, PartitionOut, ValueOut, OutputOut, TransactionOut>
         }
     }
 }

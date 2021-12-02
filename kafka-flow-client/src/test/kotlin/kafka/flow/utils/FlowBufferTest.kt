@@ -77,6 +77,22 @@ class FlowBufferTest {
         expectThat(result).isEqualTo(10_000)
     }
 
+    @Test
+    fun bug() = run {
+        val flow = flow {
+            repeat(10_000) {
+                emit(1)
+            }
+        }
+
+        val count = flow
+            .batch(1000, 200.milliseconds())
+            .flatten()
+            .count()
+
+        expectThat(count).isEqualTo(10_000)
+    }
+
     private fun run(block: suspend () -> Unit) {
         runBlocking {
             block.invoke()
