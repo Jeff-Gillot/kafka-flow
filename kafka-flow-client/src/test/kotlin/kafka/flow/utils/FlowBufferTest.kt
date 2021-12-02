@@ -5,6 +5,8 @@ import be.delta.flow.time.second
 import kafka.flow.utils.FlowBuffer.Companion.batch
 import kafka.flow.utils.FlowBuffer.Companion.flatten
 import kotlin.test.Test
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.count
@@ -13,6 +15,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import strikt.api.expectThat
 import strikt.assertions.containsExactly
@@ -75,22 +78,6 @@ class FlowBufferTest {
             .count()
 
         expectThat(result).isEqualTo(10_000)
-    }
-
-    @Test
-    fun bug() = run {
-        val flow = flow {
-            repeat(10_000) {
-                emit(1)
-            }
-        }
-
-        val count = flow
-            .batch(1000, 200.milliseconds())
-            .flatten()
-            .count()
-
-        expectThat(count).isEqualTo(10_000)
     }
 
     private fun run(block: suspend () -> Unit) {
