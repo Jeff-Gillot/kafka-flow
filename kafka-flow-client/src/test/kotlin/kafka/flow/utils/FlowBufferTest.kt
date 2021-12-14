@@ -2,11 +2,10 @@ package kafka.flow.utils
 
 import be.delta.flow.time.milliseconds
 import be.delta.flow.time.second
+import invokeAndThrow
 import kafka.flow.utils.FlowBuffer.Companion.batch
 import kafka.flow.utils.FlowBuffer.Companion.flatten
 import kotlin.test.Test
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.count
@@ -15,7 +14,6 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.toList
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import strikt.api.expectThat
 import strikt.assertions.containsExactly
@@ -82,7 +80,7 @@ class FlowBufferTest {
 
     private fun run(block: suspend () -> Unit) {
         runBlocking {
-            block.invoke()
+            block.invokeAndThrow()
         }
     }
 }

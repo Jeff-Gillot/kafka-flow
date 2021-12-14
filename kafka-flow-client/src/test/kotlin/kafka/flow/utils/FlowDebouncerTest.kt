@@ -2,6 +2,7 @@ package kafka.flow.utils
 
 import be.delta.flow.time.milliseconds
 import be.delta.flow.time.second
+import invokeAndThrow
 import java.time.Instant
 import kafka.flow.utils.FlowDebouncer.Companion.debounceAndIgnoreSkip
 import kotlin.test.Test
@@ -133,7 +134,7 @@ class FlowDebouncerTest {
 
     private fun run(block: suspend () -> Unit) {
         runBlocking {
-            block.invoke()
+            block.invokeAndThrow()
         }
     }
 }

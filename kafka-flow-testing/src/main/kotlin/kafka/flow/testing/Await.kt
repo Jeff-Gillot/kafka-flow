@@ -2,6 +2,7 @@ package kafka.flow.testing
 
 import be.delta.flow.time.milliseconds
 import be.delta.flow.time.seconds
+import invokeAndThrow
 import kotlinx.coroutines.delay
 import java.time.Duration
 import java.time.Instant
@@ -11,7 +12,7 @@ public class Await() {
     public var interval: Duration = 10.milliseconds()
 
     public constructor(block: Await.() -> Unit) : this() {
-        block.invoke(this)
+        block.invokeAndThrow(this)
     }
 
     public fun timeout(duration: Duration): Await {

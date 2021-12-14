@@ -4,6 +4,7 @@ package kafka.flow.consumer
 
 import be.delta.flow.time.milliseconds
 import be.delta.flow.time.seconds
+import invokeAndThrow
 import java.time.Duration
 import java.time.Instant
 import kafka.flow.TopicDescriptor
@@ -36,13 +37,13 @@ import org.apache.kafka.common.TopicPartition
 
 public suspend fun <Key, Partition, Value, Output> Flow<KafkaMessage<Key, Partition, Value, Output, WithoutTransaction>>.collectValues(block: suspend (Value) -> Unit) {
     this.collect {
-        if (it is Record) block.invoke(it.value)
+        if (it is Record) block.invokeAndThrow(it.value)
     }
 }
 
 public suspend fun <Key, Partition, Value, Output> Flow<KafkaMessage<Key, Partition, Value, Output, WithTransaction>>.collectValues(block: suspend (Value, WithTransaction) -> Unit) {
     this.collect {
-        if (it is Record) block.invoke(it.value, it.transaction)
+        if (it is Record) block.invokeAndThrow(it.value, it.transaction)
     }
 }
 
@@ -51,7 +52,7 @@ public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransactio
     block: suspend (Record<Key, Partition, Value, Output, Transaction>) -> Unit
 ) {
     this.collect {
-        if (it is Record) block.invoke(it)
+        if (it is Record) block.invokeAndThrow(it)
     }
 }
 
@@ -60,7 +61,7 @@ public suspend fun <KeyIn, PartitionIn, ValueIn, OutputIn, TransactionIn : Maybe
 ): Flow<KafkaMessage<KeyOut, PartitionOut, ValueOut, OutputOut, TransactionOut>> {
     return map { kafkaMessage ->
         when (kafkaMessage) {
-            is Record -> block.invoke(kafkaMessage)
+            is Record -> block.invokeAndThrow(kafkaMessage)
             is FlowControlMessage -> kafkaMessage as KafkaMessage<KeyOut, PartitionOut, ValueOut, OutputOut, TransactionOut>
         }
     }
@@ -71,7 +72,7 @@ public suspend fun <KeyIn, PartitionIn, ValueIn, OutputIn, TransactionIn : Maybe
 ): Flow<KafkaMessage<KeyOut, PartitionOut, ValueOut, OutputOut, TransactionOut>> {
     return mapNotNull { kafkaMessage ->
         when (kafkaMessage) {
-            is Record -> block.invoke(kafkaMessage)
+            is Record -> block.invokeAndThrow(kafkaMessage)
             is FlowControlMessage -> kafkaMessage as KafkaMessage<KeyOut, PartitionOut, ValueOut, OutputOut, TransactionOut>
         }
     }
@@ -83,7 +84,7 @@ public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransactio
             record.consumerRecord,
             record.key,
             record.partitionKey,
-            block.invoke(record.consumerRecord.value()),
+            block.invokeAndThrow(record.consumerRecord.value()),
             record.timestamp,
             record.output,
             record.transaction
@@ -107,7 +108,7 @@ public fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<
 ): Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>> {
     return onEach { message ->
         if (message is Record)
-            block.invoke(message)
+            block.invokeAndThrow(message)
     }
 }
 
@@ -116,7 +117,7 @@ public fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<
 ): Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>> {
     return onEach { message ->
         if (message is StartConsuming)
-            block.invoke(message.client)
+            block.invokeAndThrow(message.client)
     }
 }
 
@@ -125,7 +126,7 @@ public fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<
 ): Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>> {
     return onEach { message ->
         if (message is StopConsuming)
-            block.invoke()
+            block.invokeAndThrow()
     }
 }
 
@@ -134,7 +135,7 @@ public fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<
 ): Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>> {
     return onEach { message ->
         if (message is EndOfBatch)
-            block.invoke()
+            block.invokeAndThrow()
     }
 }
 
@@ -143,7 +144,7 @@ public fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<
 ): Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>> {
     return onEach { message ->
         if (message is PartitionsAssigned)
-            block.invoke(message.newlyAssignedPartitions, message.newAssignment)
+            block.invokeAndThrow(message.newlyAssignedPartitions, message.newAssignment)
     }
 }
 
@@ -152,7 +153,7 @@ public fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<
 ): Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>> {
     return onEach { message ->
         if (message is PartitionsRevoked)
-            block.invoke(message.revokedPartitions, message.newAssignment)
+            block.invokeAndThrow(message.revokedPartitions, message.newAssignment)
     }
 }
 
@@ -162,7 +163,7 @@ public fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<
 ): Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>> {
     return onEach { message ->
         if (message is PartitionChangedMessage)
-            block.invoke(message.newAssignment)
+            block.invokeAndThrow(message.newAssignment)
     }
 }
 
@@ -243,7 +244,7 @@ public suspend fun <Key, Partition, Value> Flow<KafkaMessage<Key, Partition, Val
 public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<KafkaMessage<Key, Partition, Value, Unit, Transaction>>.mapValueToOutput(
     block: suspend (Key, Value) -> Output
 ): Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>> {
-    return mapRecord { record -> Record(record.consumerRecord, record.key, record.partitionKey, record.value, record.timestamp, block.invoke(record.key, record.value), record.transaction) }
+    return mapRecord { record -> Record(record.consumerRecord, record.key, record.partitionKey, record.value, record.timestamp, block.invokeAndThrow(record.key, record.value), record.transaction) }
 }
 
 public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>>.groupByPartitionKey(
@@ -259,7 +260,7 @@ public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransactio
 ): Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>> {
     return filter { message ->
         if (message is Record) {
-            val result = predicate.invoke(message.value)
+            val result = predicate.invokeAndThrow(message.value)
             if (!result) message.transaction.unlock()
             result
         } else {
@@ -273,7 +274,7 @@ public fun <Key, Partition, Value, Output, Transaction : MaybeTransaction> Flow<
 ): Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>> {
     return onEach { message ->
         if (message is Record && message.value == null)
-            block.invoke(message)
+            block.invokeAndThrow(message)
     }
 }
 
@@ -284,7 +285,7 @@ public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransactio
         val keyValues = records
             .filterIsInstance<Record<Key, Partition, Value, Unit, Transaction>>()
             .map { it.key to it.value }
-        records to block.invoke(keyValues)
+        records to block.invokeAndThrow(keyValues)
     }
 }
 
@@ -296,7 +297,7 @@ public suspend fun <Key, Partition, Value, Output, Transaction : MaybeTransactio
 ): Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>> {
     return debounce(
         { message -> if (message is Record<Key, Partition, Value, Output, Transaction>) Pair(message.consumerRecord.topic(), message.key) else null },
-        { message, instant -> if (message is Record<Key, Partition, Value, Output, Transaction>) timeProvider.invoke(message, instant) else null },
+        { message, instant -> if (message is Record<Key, Partition, Value, Output, Transaction>) timeProvider.invokeAndThrow(message, instant) else null },
         maxDebounceDuration,
         interval,
         cleanUpInterval
@@ -325,7 +326,7 @@ public suspend fun <Key, Partition, Value, Transaction : MaybeTransaction> Flow<
     return splitMultipleOutputToSingleMessages()
         .debounce(
             { message -> message.getSingleOutputRecordOrNull()?.let { Pair(it.topicDescriptor.name, it.key) } },
-            { message, instant -> message.getSingleOutputRecordOrNull()?.let { timeProvider.invoke(it, instant) } },
+            { message, instant -> message.getSingleOutputRecordOrNull()?.let { timeProvider.invokeAndThrow(it, instant) } },
             maxDebounceDuration,
             interval,
             cleanUpInterval

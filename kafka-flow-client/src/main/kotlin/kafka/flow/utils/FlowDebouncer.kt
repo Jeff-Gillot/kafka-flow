@@ -2,6 +2,7 @@ package kafka.flow.utils
 
 import be.delta.flow.time.milliseconds
 import be.delta.flow.time.seconds
+import invokeAndThrow
 import java.time.Duration
 import java.time.Instant
 import kotlinx.coroutines.CoroutineScope
@@ -106,7 +107,7 @@ public class FlowDebouncer<Input, Key> {
         CoroutineScope(currentCoroutineContext()).launch {
             flow.collect { value: Input ->
                 val actions: List<Action<Input>> = mutex.withLock {
-                    val key = keyProvider.invoke(value)
+                    val key = keyProvider.invokeAndThrow(value)
                     var oldValue: Input? = null
                     var time: Instant? = null
                     if (key != null) {

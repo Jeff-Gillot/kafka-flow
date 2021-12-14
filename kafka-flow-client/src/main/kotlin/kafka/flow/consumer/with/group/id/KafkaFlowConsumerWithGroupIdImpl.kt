@@ -5,7 +5,6 @@ import be.delta.flow.time.seconds
 import java.time.Instant
 import java.util.Properties
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicInteger
 import kafka.flow.consumer.AutoStopPolicy
 import kafka.flow.consumer.EndOfBatch
 import kafka.flow.consumer.KafkaFlowConsumerWithGroupId
@@ -17,7 +16,6 @@ import kafka.flow.consumer.Record
 import kafka.flow.consumer.StartConsuming
 import kafka.flow.consumer.StartOffsetPolicy
 import kafka.flow.consumer.StopConsuming
-import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -208,8 +206,8 @@ public class KafkaFlowConsumerWithGroupIdImpl(
         startEndOffsetsRefreshLoop()
     }
 
-    private fun startEndOffsetsRefreshLoop() {
-        CoroutineScope(EmptyCoroutineContext).launch(Dispatchers.IO) {
+    private suspend fun startEndOffsetsRefreshLoop() {
+        CoroutineScope(currentCoroutineContext()).launch(Dispatchers.IO) {
             val endOffsetConsumer: KafkaConsumer<ByteArray, ByteArray> = KafkaConsumer(properties, ByteArrayDeserializer(), ByteArrayDeserializer())
             endOffsetConsumer.use {
                 while (!shouldStop()) {
@@ -258,7 +256,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
         try {
             emit(StopConsuming())
         } finally {
-            CoroutineScope(EmptyCoroutineContext).launch(Dispatchers.IO) {
+            CoroutineScope(currentCoroutineContext()).launch(Dispatchers.IO) {
                 delay(50)
                 delegateMutex.withLock {
                     running = false

@@ -1,5 +1,6 @@
 package kafka.flow.producer
 
+import invokeAndThrow
 import java.time.Instant
 import java.util.Properties
 import kafka.flow.TopicDescriptor
@@ -41,8 +42,8 @@ public class KafkaFlowTopicProducer<Key, PartitionKey, Value>(private val topicD
             )
         ) { metadata, exception ->
             runBlocking {
-                if (exception != null) callback.invoke(Result.failure(exception))
-                else callback.invoke(Result.success(metadata))
+                if (exception != null) callback.invokeAndThrow(Result.failure(exception))
+                else callback.invokeAndThrow(Result.success(metadata))
             }
         }
     }
@@ -69,8 +70,8 @@ public class KafkaFlowTopicProducer<Key, PartitionKey, Value>(private val topicD
             )
         ) { metadata, exception ->
             runBlocking {
-                if (exception != null) callback.invoke(Result.failure(exception))
-                else callback.invoke(Result.success(metadata))
+                if (exception != null) callback.invokeAndThrow(Result.failure(exception))
+                else callback.invokeAndThrow(Result.success(metadata))
             }
         }
     }

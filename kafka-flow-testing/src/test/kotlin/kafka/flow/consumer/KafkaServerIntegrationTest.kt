@@ -1,5 +1,6 @@
 package kafka.flow.consumer
 
+import invokeAndThrow
 import java.util.concurrent.TimeoutException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancelChildren
@@ -15,7 +16,7 @@ fun runTest(block: suspend CoroutineScope.() -> Unit) {
             throw TimeoutException("Test didn't finish in time")
         }
         try {
-            block.invoke(this)
+            block.invokeAndThrow(this)
         } finally {
             currentCoroutineContext().cancelChildren()
         }

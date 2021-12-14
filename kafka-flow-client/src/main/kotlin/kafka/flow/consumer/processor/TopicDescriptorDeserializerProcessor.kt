@@ -1,5 +1,6 @@
 package kafka.flow.consumer.processor
 
+import invokeAndThrow
 import kafka.flow.TopicDescriptor
 import kafka.flow.consumer.Record
 import kafka.flow.consumer.with.group.id.MaybeTransaction
@@ -31,7 +32,7 @@ public class TopicDescriptorDeserializerProcessor<Key, PartitionKey, Value, Outp
             return Record(consumerRecord, newKey, newPartitionKey, newValue, newTimestamp, output, transaction)
         } catch (throwable: Throwable) {
             runCatching {
-                onDeserializationException.invoke(throwable)
+                onDeserializationException.invokeAndThrow(throwable)
             }.onFailure {
                 it.printStackTrace()
                 throwable.printStackTrace()

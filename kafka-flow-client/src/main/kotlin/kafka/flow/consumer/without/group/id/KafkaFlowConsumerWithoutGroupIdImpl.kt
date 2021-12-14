@@ -16,7 +16,6 @@ import kafka.flow.consumer.StartOffsetPolicy
 import kafka.flow.consumer.StopConsuming
 import kafka.flow.consumer.with.group.id.WithoutTransaction
 import kafka.flow.utils.logger
-import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -158,8 +157,8 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
         startEndOffsetsRefreshLoop()
     }
 
-    private fun startEndOffsetsRefreshLoop() {
-        CoroutineScope(EmptyCoroutineContext).launch(Dispatchers.IO) {
+    private suspend fun startEndOffsetsRefreshLoop() {
+        CoroutineScope(currentCoroutineContext()).launch(Dispatchers.IO) {
             val endOffsetConsumer: KafkaConsumer<ByteArray, ByteArray> = KafkaConsumer(properties, ByteArrayDeserializer(), ByteArrayDeserializer())
             endOffsetConsumer.use {
                 while (!shouldStop()) {
@@ -195,7 +194,7 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
         try {
             emit(StopConsuming())
         } finally {
-            CoroutineScope(EmptyCoroutineContext).launch(Dispatchers.IO) {
+            CoroutineScope(currentCoroutineContext()).launch(Dispatchers.IO) {
                 delay(50)
                 delegateMutex.withLock {
                     running = false

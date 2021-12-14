@@ -6,6 +6,7 @@ import be.delta.flow.time.nanoseconds
 import be.delta.flow.time.seconds
 import com.codahale.metrics.Meter
 import com.codahale.metrics.Timer
+import invokeAndThrow
 import java.text.DecimalFormat
 import java.time.Duration
 import java.time.Instant
@@ -25,10 +26,10 @@ import kafka.flow.producer.KafkaOutput
 import kafka.flow.utils.FlowDebouncer
 import kafka.flow.utils.FlowDebouncer.Companion.debounce
 import kafka.flow.utils.logger
-import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.system.measureNanoTime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
@@ -52,14 +53,14 @@ public class KafkaMetricLogger(private val name: String) {
     public val skippedMeters: Map<String, Meter> = _skippedMeters
     public val timers: Map<String, Timer> = _timers
 
-    public fun start(consumer: KafkaFlowConsumer<*>, interval: Duration = 30.seconds(), printBlock: (KafkaMetricLogger) -> Unit) {
+    public suspend fun start(consumer: KafkaFlowConsumer<*>, interval: Duration = 30.seconds(), printBlock: (KafkaMetricLogger) -> Unit) {
         this.consumer = consumer
-        CoroutineScope(EmptyCoroutineContext).launch {
+        CoroutineScope(currentCoroutineContext()).launch {
             val intervalInMillis = interval.toMillis()
             delay(intervalInMillis)
             while (consumer.isRunning() && isActive) {
                 try {
-                    printBlock.invoke(this@KafkaMetricLogger)
+                    printBlock.invokeAndThrow(this@KafkaMetricLogger)
                     delay(intervalInMillis)
                 } catch (cancellationException: CancellationException) {
                 } catch (throwable: Throwable) {
@@ -210,7 +211,7 @@ public class KafkaMetricLogger(private val name: String) {
 
                 var result: Output
                 val time = measureNanoTime {
-                    result = block.invoke(keyValues)
+                    result = block.invokeAndThrow(keyValues)
                 }
 
                 kafkaMetricLogger.registerInput(records, time)
@@ -233,7 +234,7 @@ public class KafkaMetricLogger(private val name: String) {
                 if (record is Record) {
                     var result: Output
                     val time = measureNanoTime {
-                        result = block.invoke(record.key, record.value)
+                        result = block.invokeAndThrow(record.key, record.value)
                     }
 
                     kafkaMetricLogger.registerInput(record, time)
@@ -259,7 +260,7 @@ public class KafkaMetricLogger(private val name: String) {
         ): Flow<KafkaMessage<Key, Partition, Value, Output, Transaction>> {
             return debounce(
                 { message -> if (message is Record<Key, Partition, Value, Output, Transaction>) Pair(message.consumerRecord.topic(), message.key) else null },
-                { message, instant -> if (message is Record<Key, Partition, Value, Output, Transaction>) timeProvider.invoke(message, instant) else null },
+                { message, instant -> if (message is Record<Key, Partition, Value, Output, Transaction>) timeProvider.invokeAndThrow(message, instant) else null },
                 maxDebounceDuration,
                 interval,
                 cleanUpInterval

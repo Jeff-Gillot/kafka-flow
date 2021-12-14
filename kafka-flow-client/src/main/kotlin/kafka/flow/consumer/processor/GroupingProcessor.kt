@@ -1,6 +1,7 @@
 package kafka.flow.consumer.processor
 
 import be.delta.flow.time.seconds
+import invokeAndThrow
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
@@ -116,7 +117,7 @@ public class GroupingProcessor<Key, PartitionKey, Value, Output, Transaction : M
                     val channel = Channel<KafkaMessage<Key, PartitionKey, Value, Output, Transaction>>(channelCapacity)
                     val flow = channel.consumeAsFlow()
                     CoroutineScope(coroutineContext).launch {
-                        flowFactory.invoke(flow, partitionKey)
+                        flowFactory.invokeAndThrow(flow, partitionKey)
                     }
                     channel.send(StartConsuming(client))
                     channel

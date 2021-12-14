@@ -1,5 +1,6 @@
 package kafka.flow.server
 
+import invokeAndThrow
 import kafka.flow.TopicDescriptor
 import kafka.flow.utils.logger
 import org.apache.kafka.clients.admin.*
@@ -54,7 +55,7 @@ public class KafkaAdministration(private val properties: Properties) {
     }
 
     public fun <T> withAdminClient(block: AdminClient.() -> T): T {
-        return AdminClient.create(properties).use { block.invoke(it) }
+        return AdminClient.create(properties).use { block.invokeAndThrow(it) }
     }
 
     private fun AdminClient.fetchAllExistingTopics(): Map<String, TopicDescription> {
