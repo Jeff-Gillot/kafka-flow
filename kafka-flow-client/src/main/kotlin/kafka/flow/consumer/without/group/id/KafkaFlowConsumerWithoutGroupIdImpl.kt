@@ -19,6 +19,7 @@ import kafka.flow.utils.logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -52,6 +53,7 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
     private val delegateMutex = Mutex()
     private val pollDuration = 10.milliseconds()
     private val positions = ConcurrentHashMap<TopicPartition, Long>()
+    private var endOffsetsLoop: Job? = null
 
     init {
         require(clientProperties[ConsumerConfig.GROUP_ID_CONFIG] == null) { "${ConsumerConfig.GROUP_ID_CONFIG} must NOT be set" }
@@ -119,6 +121,7 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
                 t.printStackTrace()
             } finally {
                 channel.close()
+                endOffsetsLoop?.cancel()
             }
         }
         return channel
@@ -159,7 +162,7 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
     }
 
     private suspend fun startEndOffsetsRefreshLoop() {
-        CoroutineScope(currentCoroutineContext()).launch(Dispatchers.IO) {
+        endOffsetsLoop = CoroutineScope(currentCoroutineContext()).launch(Dispatchers.IO) {
             val endOffsetConsumer: KafkaConsumer<ByteArray, ByteArray> = KafkaConsumer(properties, ByteArrayDeserializer(), ByteArrayDeserializer())
             endOffsetConsumer.use {
                 while (!shouldStop() && isActive) {

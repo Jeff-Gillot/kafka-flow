@@ -19,6 +19,7 @@ import kafka.flow.consumer.StopConsuming
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -58,6 +59,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
     private val pollDuration = 10.milliseconds()
     private val positions = ConcurrentHashMap<TopicPartition, Long>()
     override val assignment: List<TopicPartition> get() = _assignment
+    private var endOffsetsLoop: Job? = null
 
     init {
         requireNotNull(clientProperties[ConsumerConfig.GROUP_ID_CONFIG]) { "${ConsumerConfig.GROUP_ID_CONFIG} must be set" }
@@ -163,6 +165,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
                 t.printStackTrace()
             } finally {
                 channel.close()
+                endOffsetsLoop?.cancel()
             }
         }
         return channel
@@ -208,7 +211,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
     }
 
     private suspend fun startEndOffsetsRefreshLoop() {
-        CoroutineScope(currentCoroutineContext()).launch(Dispatchers.IO) {
+        endOffsetsLoop = CoroutineScope(currentCoroutineContext()).launch(Dispatchers.IO) {
             val endOffsetConsumer: KafkaConsumer<ByteArray, ByteArray> = KafkaConsumer(properties, ByteArrayDeserializer(), ByteArrayDeserializer())
             endOffsetConsumer.use {
                 while (!shouldStop() && isActive) {
