@@ -166,6 +166,7 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
                     try {
                         endOffsets = endOffsetConsumer.endOffsets(assignment)
                         delay(10.seconds().toMillis())
+                    } catch (t: CancellationException) {
                     } catch (throwable: Throwable) {
                         logger.warn("Error while trying to fetch the end offsets", throwable)
                     }
