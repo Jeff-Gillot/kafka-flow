@@ -21,6 +21,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.consumeAsFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
@@ -54,7 +55,7 @@ public class GroupingProcessor<Key, PartitionKey, Value, Output, Transaction : M
         this.client = client
 
         processorTimeoutLoop = CoroutineScope(currentCoroutineContext()).launch {
-            while (true) {
+            while (isActive) {
                 delay(10.seconds().toMillis())
                 val processorsToRemove = processorLastMessage
                     .filterValues { it < Instant.now() - processorTimeout }

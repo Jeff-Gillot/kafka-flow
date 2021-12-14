@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.consumeAsFlow
 import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -109,7 +110,7 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
             try {
                 channel.send(StartConsuming(this@KafkaFlowConsumerWithoutGroupIdImpl))
                 channel.send(PartitionsAssigned(assignment, assignment))
-                while (!shouldStop()) {
+                while (!shouldStop() && isActive) {
                     fetchAndProcessRecords(channel)
                 }
                 channel.close()
@@ -161,7 +162,7 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
         CoroutineScope(currentCoroutineContext()).launch(Dispatchers.IO) {
             val endOffsetConsumer: KafkaConsumer<ByteArray, ByteArray> = KafkaConsumer(properties, ByteArrayDeserializer(), ByteArrayDeserializer())
             endOffsetConsumer.use {
-                while (!shouldStop()) {
+                while (!shouldStop() && isActive) {
                     try {
                         endOffsets = endOffsetConsumer.endOffsets(assignment)
                         delay(10.seconds().toMillis())
