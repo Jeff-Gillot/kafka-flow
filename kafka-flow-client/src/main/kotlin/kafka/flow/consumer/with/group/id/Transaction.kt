@@ -28,7 +28,6 @@ public class WithTransaction(
     private val locks: AtomicInteger = AtomicInteger(1)
     private var closed: Boolean = false
     public val stackTraces: MutableList<List<StackTraceElement>> = mutableListOf()
-    public var sent :Boolean = false
 
     public override fun lock() {
         synchronized(stackTraces) { stackTraces.add(Exception().stackTrace.toList()) }
@@ -66,7 +65,7 @@ public class WithTransaction(
     }
 
     override fun toString(): String {
-        return "Transaction($topicPartition@$offset)/$transactionTime/${locks.get()} ($sent)"
+        return "Transaction($topicPartition@$offset)/$transactionTime/${locks.get()}"
     }
 
     private companion object {

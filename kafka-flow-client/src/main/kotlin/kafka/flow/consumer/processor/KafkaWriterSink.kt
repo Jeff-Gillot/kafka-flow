@@ -18,9 +18,6 @@ public class KafkaWriterSink<Key, PartitionKey, Value, Transaction : MaybeTransa
         output: KafkaOutput,
         transaction: Transaction
     ) {
-        if (transaction is WithTransaction) {
-            transaction.sent = true
-        }
         output.records.forEach { outputRecord ->
             val record: TopicDescriptorRecord<Any, Any, Any> = outputRecord as TopicDescriptorRecord<Any, Any, Any>
             transaction.lock()
