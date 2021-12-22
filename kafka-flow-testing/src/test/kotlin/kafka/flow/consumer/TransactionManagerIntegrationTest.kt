@@ -5,7 +5,6 @@ import be.delta.flow.time.seconds
 import java.util.Properties
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
 import kafka.flow.TopicDescriptor
 import kafka.flow.consumer.with.group.id.KafkaFlowConsumerWithGroupIdImpl
 import kafka.flow.producer.KafkaFlowTopicProducer
@@ -18,8 +17,6 @@ import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.filterIsInstance
-import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.apache.kafka.clients.admin.AdminClient
@@ -112,7 +109,6 @@ class TransactionManagerIntegrationTest {
                 .onEachRecord {
                     if (count < 5) {
                         delay(100)
-                        println("unlocking ${it.transaction}")
                         it.transaction.unlock()
                     }
                     count++
@@ -167,7 +163,6 @@ class TransactionManagerIntegrationTest {
         }
 
         repeat(10) { producer.send(TestObject.random()) }
-        delay(1000)
 
         Await().untilAsserted {
             expectThat(count).isEqualTo(10)
@@ -176,14 +171,16 @@ class TransactionManagerIntegrationTest {
 
     @Test
     fun committingTransactionOnStopConsumer_changesCommittedOffsets(): Unit = runTest {
-        consumer = KafkaFlowConsumerWithGroupIdImpl(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.never())
+        consumer = KafkaFlowConsumerWithGroupIdImpl(properties(), listOf(topic.name), StartOffsetPolicy.earliest(), AutoStopPolicy.whenUpToDate())
+
+        repeat(10) { producer.send(TestObject.random()) }
 
         launch {
             consumer!!.startConsuming()
-                .createTransactions(10).onEachRecord { it.transaction.unlock() }.filterIsInstance<Record<*, *, *, *, *>>().take(10).collect()
+                .createTransactions(10)
+                .onEachRecord { it.transaction.unlock() }
+                .collect()
         }
-
-        repeat(20) { producer.send(TestObject.random()) }
 
         Await().untilAsserted {
             val committedOffsets: Map<TopicPartition, Long> =

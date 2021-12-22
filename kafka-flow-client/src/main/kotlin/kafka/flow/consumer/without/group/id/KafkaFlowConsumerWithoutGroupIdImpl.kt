@@ -13,24 +13,24 @@ import kafka.flow.consumer.PartitionsAssigned
 import kafka.flow.consumer.Record
 import kafka.flow.consumer.StartConsuming
 import kafka.flow.consumer.StartOffsetPolicy
-import kafka.flow.consumer.StopConsuming
 import kafka.flow.consumer.with.group.id.WithoutTransaction
 import kafka.flow.utils.logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.consumeAsFlow
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.KafkaConsumer
@@ -51,7 +51,7 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
     private var startInstant: Instant? = null
     private var endOffsets: Map<TopicPartition, Long> = emptyMap()
     private val delegateMutex = Mutex()
-    private val pollDuration = 10.milliseconds()
+    private val pollDuration = 100.milliseconds()
     private val positions = ConcurrentHashMap<TopicPartition, Long>()
     private var endOffsetsLoop: Job? = null
 
@@ -100,6 +100,7 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
 
     override fun stop() {
         stopRequested = true
+        endOffsetsLoop?.cancel()
     }
 
     override fun close() {
@@ -112,9 +113,9 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
             try {
                 channel.send(StartConsuming(this@KafkaFlowConsumerWithoutGroupIdImpl))
                 channel.send(PartitionsAssigned(assignment, assignment))
-                while (!shouldStop() && isActive) {
+                do {
                     fetchAndProcessRecords(channel)
-                }
+                } while (!shouldStop() && isActive)
                 channel.close()
             } catch (t: CancellationException) {
             } catch (t: Throwable) {
@@ -195,17 +196,11 @@ public class KafkaFlowConsumerWithoutGroupIdImpl(
         }
     }
 
-    private suspend fun FlowCollector<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>.cleanup() {
-        try {
-            emit(StopConsuming())
-        } finally {
-            CoroutineScope(currentCoroutineContext()).launch(Dispatchers.IO) {
-                delay(50)
-                delegateMutex.withLock {
-                    running = false
-                    delegate.close()
-                }
-            }
+    private suspend fun cleanup() {
+        withContext(NonCancellable) {
+            delay(250)
+            delegate.close()
+            running = false
         }
     }
 }

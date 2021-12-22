@@ -20,17 +20,18 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.consumeAsFlow
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener
@@ -56,7 +57,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
     private var _assignment: List<TopicPartition> = emptyList()
     private val partitionChangedMessages = mutableListOf<PartitionChangedMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>()
     private val delegateMutex = Mutex()
-    private val pollDuration = 10.milliseconds()
+    private val pollDuration = 100.milliseconds()
     private val positions = ConcurrentHashMap<TopicPartition, Long>()
     override val assignment: List<TopicPartition> get() = _assignment
     private var endOffsetsLoop: Job? = null
@@ -112,32 +113,18 @@ public class KafkaFlowConsumerWithGroupIdImpl(
         stop()
     }
 
-    override suspend fun commit(offsetsToCommit: Map<TopicPartition, OffsetAndMetadata>): Result<Map<TopicPartition, OffsetAndMetadata>> {
-        val mutex = Mutex(true)
-        var result: Result<Map<TopicPartition, OffsetAndMetadata>>? = null
-
-        if (!isRunning()) {
-            result = Result.success(emptyMap())
-        } else {
+    override suspend fun commit(offsetsToCommit: Map<TopicPartition, OffsetAndMetadata>, callback: (Result<Map<TopicPartition, OffsetAndMetadata>>) -> Unit) {
+        if (offsetsToCommit.isNotEmpty()) {
             delegateMutex.withLock {
-                try {
-                    delegate.commitAsync(offsetsToCommit) { offsets, exception ->
-                        result = if (exception != null) {
-                            Result.failure(exception)
-                        } else {
-                            Result.success(offsets!!)
-                        }
-                        mutex.unlock()
+                delegate.commitAsync(offsetsToCommit) { offsets, exception ->
+                    if (exception != null) {
+                        callback.invoke(Result.failure(exception))
+                    } else {
+                        callback(Result.success(offsets!!))
                     }
-                } catch (throwable: Throwable) {
-                    result = Result.failure(throwable)
-                    mutex.unlock()
                 }
             }
         }
-        mutex.lock()
-
-        return result!!
     }
 
     override suspend fun rollback(topicPartitionToRollback: Set<TopicPartition>) {
@@ -156,10 +143,12 @@ public class KafkaFlowConsumerWithGroupIdImpl(
         CoroutineScope(currentCoroutineContext()).launch(Dispatchers.IO) {
             try {
                 channel.send(StartConsuming(this@KafkaFlowConsumerWithGroupIdImpl))
-                while (!shouldStop() && isActive) {
+                do {
                     fetchAndProcessRecords(channel)
+                } while (!shouldStop() && isActive)
+                if (isActive) {
+                    channel.send(StopConsuming())
                 }
-                channel.close()
             } catch (t: CancellationException) {
             } catch (t: Throwable) {
                 t.printStackTrace()
@@ -228,6 +217,7 @@ public class KafkaFlowConsumerWithGroupIdImpl(
     }
 
     private fun partitionAssigned(assignedPartitions: List<TopicPartition>) {
+        endOffsets = delegate.endOffsets(delegate.assignment())
         _assignment = delegate.assignment().toList()
         seek(_assignment)
         partitionChangedMessages.add(PartitionsAssigned(assignedPartitions, _assignment))
@@ -257,17 +247,11 @@ public class KafkaFlowConsumerWithGroupIdImpl(
         }
     }
 
-    private suspend fun FlowCollector<KafkaMessage<Unit, Unit, Unit, Unit, WithoutTransaction>>.cleanup() {
-        try {
-            emit(StopConsuming())
-        } finally {
-            CoroutineScope(currentCoroutineContext()).launch(Dispatchers.IO) {
-                delay(50)
-                delegateMutex.withLock {
-                    running = false
-                    delegate.close()
-                }
-            }
+    private suspend fun cleanup() {
+        withContext(NonCancellable) {
+            delay(250)
+            delegate.close()
+            running = false
         }
     }
 

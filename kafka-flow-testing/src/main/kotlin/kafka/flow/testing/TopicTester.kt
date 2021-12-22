@@ -2,14 +2,18 @@ package kafka.flow.testing
 
 import be.delta.flow.time.minutes
 import be.delta.flow.time.seconds
+import java.time.Duration
 import kafka.flow.TopicDescriptor
-import kafka.flow.consumer.*
+import kafka.flow.consumer.Record
+import kafka.flow.consumer.StartOffsetPolicy
+import kafka.flow.consumer.ignoreTombstones
+import kafka.flow.consumer.onEachRecord
+import kafka.flow.consumer.values
 import kafka.flow.server.KafkaServer
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.toList
-import java.time.Duration
 
 public class TopicTester<Key, PartitionKey, Value>(private val topicDescriptor: TopicDescriptor<Key, PartitionKey, Value>, private val kafkaServer: KafkaServer) {
     public suspend fun expectMessage(
@@ -64,18 +68,20 @@ public class TopicTester<Key, PartitionKey, Value>(private val topicDescriptor: 
         conditions: Conditions<Value>,
     ): Pair<Value?, List<Value>> {
         var record: Value? = null
-        val records = kafkaServer.from(topicDescriptor)
+        val consumer = kafkaServer
+            .from(topicDescriptor)
             .consumer()
             .withoutGroupId()
             .startFromPolicy(startOffsetPolicy)
             .consumerUntilSpecifiedOffsetFromNow(timeout)
             .readAllPartitions()
+        val records = consumer
             .startConsuming()
             .ignoreTombstones()
             .values()
             .filter(filter)
             .onEach { if (conditions.test(it).isSuccess) record = it }
-            .takeWhile { record == null }
+            .onEach { if (record != null) consumer.stop() }
             .toList()
         return Pair(record, records)
     }

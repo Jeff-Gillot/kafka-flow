@@ -45,10 +45,11 @@ public class TransactionManager(private val maxOpenTransactions: Int) {
     public suspend fun rollbackAndCommit(client: KafkaFlowConsumerWithGroupId<*>) {
         client.rollback(getPartitionsToRollback())
         val offsetsToCommit = computeOffsetsToCommit(client.assignment)
-        client
-            .commit(offsetsToCommit)
-            .onSuccess { committedOffsets -> removeCommittedOffsets(committedOffsets) }
-            .onFailure { logger.error("[TransactionManager] Error while committing offsets ($offsetsToCommit), the system will retry", it) }
+        client.commit(offsetsToCommit) { result ->
+            if (result.isSuccess) {
+                removeCommittedOffsets(result.getOrThrow())
+            } else logger.error("[TransactionManager] Error while committing offsets ($offsetsToCommit), the system will retry", result.exceptionOrNull())
+        }
     }
 
     public fun computeOffsetsToCommit(assignment: List<TopicPartition>): Map<TopicPartition, OffsetAndMetadata> {

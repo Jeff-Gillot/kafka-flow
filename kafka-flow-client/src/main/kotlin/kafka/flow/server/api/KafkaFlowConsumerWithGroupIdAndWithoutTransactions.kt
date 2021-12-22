@@ -28,7 +28,8 @@ public class KafkaFlowConsumerWithGroupIdAndWithoutTransactions<Key, PartitionKe
     override fun isUpToDate(): Boolean = delegate.isUpToDate()
     override fun lag(): Long? = delegate.lag()
     override fun lags(): Map<TopicPartition, Long?>? = delegate.lags()
-    override suspend fun commit(offsetsToCommit: Map<TopicPartition, OffsetAndMetadata>): Result<Map<TopicPartition, OffsetAndMetadata>> = delegate.commit(offsetsToCommit)
+    override suspend fun commit(offsetsToCommit: Map<TopicPartition, OffsetAndMetadata>, callback: (Result<Map<TopicPartition, OffsetAndMetadata>>) -> Unit): Unit =
+        delegate.commit(offsetsToCommit, callback)
     override suspend fun rollback(topicPartitionToRollback: Set<TopicPartition>): Unit = delegate.rollback(topicPartitionToRollback)
     override fun close(): Unit = delegate.close()
     override val assignment: List<TopicPartition> get() = delegate.assignment

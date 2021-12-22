@@ -1,7 +1,7 @@
 import java.net.URI
 
 plugins {
-    kotlin("jvm") version "1.5.20"
+    kotlin("jvm") version "1.6.10"
     `maven-publish`
 }
 
@@ -20,8 +20,9 @@ subprojects {
     }
 
     java {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        toolchain {
+            languageVersion.set(JavaLanguageVersion.of(17))
+        }
         withSourcesJar()
     }
 
@@ -40,7 +41,7 @@ subprojects {
             create<MavenPublication>("maven") {
                 groupId = "com.github.Jeff-Gillot.kafka-flow"
                 artifactId = project.name
-                version = "1.1.0-SNAPSHOT"
+                version = "1.2.6-SNAPSHOT"
 
                 from(components["java"])
             }

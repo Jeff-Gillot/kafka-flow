@@ -74,16 +74,12 @@ public class TransactionProcessor<Key, PartitionKey, Value, Output>(
     }
 
     override suspend fun stopConsuming() {
-        stopAndCommitFinishedTransactions()
+        commitLoop?.cancel()
+        client?.let { transactionManager.rollbackAndCommit(it) }
     }
 
     override suspend fun completion() {
-        stopAndCommitFinishedTransactions()
-    }
-
-    private suspend fun stopAndCommitFinishedTransactions() {
         commitLoop?.cancel()
-        client?.let { transactionManager.rollbackAndCommit(it) }
     }
 
     override suspend fun partitionRevoked(revokedPartition: List<TopicPartition>, assignment: List<TopicPartition>) {

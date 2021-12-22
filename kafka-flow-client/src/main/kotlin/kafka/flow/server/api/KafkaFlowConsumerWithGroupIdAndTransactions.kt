@@ -1,16 +1,19 @@
 package kafka.flow.server.api
 
+import java.time.Duration
+import java.util.Properties
 import kafka.flow.TopicDescriptor
-import kafka.flow.consumer.*
+import kafka.flow.consumer.AutoStopPolicy
 import kafka.flow.consumer.KafkaFlowConsumerWithGroupId
+import kafka.flow.consumer.KafkaMessage
+import kafka.flow.consumer.StartOffsetPolicy
+import kafka.flow.consumer.createTransactions
+import kafka.flow.consumer.deserializeUsing
 import kafka.flow.consumer.with.group.id.KafkaFlowConsumerWithGroupIdImpl
 import kafka.flow.consumer.with.group.id.WithTransaction
-import kafka.flow.consumer.deserializeUsing
 import kotlinx.coroutines.flow.Flow
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
-import java.time.Duration
-import java.util.*
 
 public class KafkaFlowConsumerWithGroupIdAndTransactions<Key, PartitionKey, Value>(
     clientProperties: Properties,
@@ -34,7 +37,9 @@ public class KafkaFlowConsumerWithGroupIdAndTransactions<Key, PartitionKey, Valu
     override fun isUpToDate(): Boolean = delegate.isUpToDate()
     override fun lag(): Long? = delegate.lag()
     override fun lags(): Map<TopicPartition, Long?>? = delegate.lags()
-    override suspend fun commit(offsetsToCommit: Map<TopicPartition, OffsetAndMetadata>): Result<Map<TopicPartition, OffsetAndMetadata>> = delegate.commit(offsetsToCommit)
+    override suspend fun commit(offsetsToCommit: Map<TopicPartition, OffsetAndMetadata>, callback: (Result<Map<TopicPartition, OffsetAndMetadata>>) -> Unit): Unit =
+        delegate.commit(offsetsToCommit, callback)
+
     override suspend fun rollback(topicPartitionToRollback: Set<TopicPartition>): Unit = delegate.rollback(topicPartitionToRollback)
     override fun close(): Unit = delegate.close()
     override val assignment: List<TopicPartition> get() = delegate.assignment
